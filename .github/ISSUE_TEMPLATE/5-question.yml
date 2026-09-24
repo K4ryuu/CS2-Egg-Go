@@ -1,0 +1,46 @@
+name: Question / Support
+description: Ask a question or request help
+title: "[Question]: "
+labels: ["question"]
+projects: ["K4ryuu/8"]
+assignees:
+  - K4ryuu
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? Need help? I'm here to assist!
+
+  - type: dropdown
+    id: urgency
+    attributes:
+      label: Urgency
+      description: How urgent is your question?
+      options:
+        - Low - General inquiry
+        - Medium - Need answer soon
+        - High - Blocking my work
+        - Critical - Production issue
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know? Include any relevant context, logs, or screenshots that may help.
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues and confirmed this is not a duplicate
+          required: true
+        - label: I have included all necessary context to answer this question
+          required: true

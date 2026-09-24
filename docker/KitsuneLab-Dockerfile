@@ -1,0 +1,49 @@
+# Dockerfile with SteamRT3
+#
+# Stage 1 builds cs2egg, the Go entrypoint, on the builder's native platform and
+# cross-compiles for linux/amd64 (static, no libc).
+#
+# The upstream steamrt layer stores hardlink targets as absolute paths ("/bin/gunzip").
+# dockerd builds between the hardlink-breakout hardening and the follow-up that accepts
+# absolute targets reject that layer on pull ("failed to register layer: invalid hardlink
+# target"). Re-exporting the rootfs through BuildKit rewrites those links relative, so the
+# base is flattened into one layer of our own before anything is stacked on top. The upstream
+# config carries only the default PATH and cosmetic labels, nothing to carry over.
+FROM        --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+ARG         VERSION=0.0.0-dev
+ARG         CHANNEL=dev
+ARG         COMMIT=none
+ARG         BUILT=unknown
+WORKDIR     /src
+COPY        go.mod go.sum ./
+RUN         go mod download
+COPY        cmd ./cmd
+COPY        internal ./internal
+RUN         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+              -ldflags "-s -w -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Version=${VERSION} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Channel=${CHANNEL} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Commit=${COMMIT} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Built=${BUILT}" \
+              -o /out/cs2egg ./cmd/cs2egg
+
+FROM        registry.gitlab.steamos.cloud/steamrt/sniper/platform:latest-container-runtime-depot AS upstream
+
+FROM        scratch
+COPY        --from=upstream / /
+ENV         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+LABEL       author="K4ryuu @ KitsuneLab" \
+            maintainer="k4ryuu@icloud.com" \
+            org.opencontainers.image.description="The SteamRT3 Platform image for Pterodactyl CS2 servers is packed with numerous features, designed to simplify server management and reduce hassle." \
+            org.opencontainers.image.source="https://github.com/K4ryuu/CS2-Egg-Go"
+
+# Prep OS: no packages on top of the runtime (curl and tar are already in it),
+# only the unprivileged user Wings runs the server as. The base image ships
+# sudo and an empty sudo group; the bash egg also left a NOPASSWD rule for
+# that group behind, which nothing here needs and which would hand out root
+# in the container the day anything lands in group 27.
+RUN         useradd -m -d /home/container -s /bin/bash container
+
+COPY        --from=build --chmod=555 /out/cs2egg /usr/local/bin/cs2egg
+
+USER        container
+ENV         USER=container HOME=/home/container
+WORKDIR     /home/container
+
+CMD         [ "/usr/local/bin/cs2egg" ]

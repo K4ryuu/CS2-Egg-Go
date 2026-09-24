@@ -1,0 +1,46 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["feature"]
+projects: ["K4ryuu/8"]
+assignees:
+  - K4ryuu
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please describe your idea in detail.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve experience
+        - High - Important for many users
+        - Critical - Essential feature
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Feature Description
+      description: Describe the feature you'd like to see. Include any mockups, examples, or additional context that may help.
+      placeholder: I would like to see...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues and confirmed this is not a duplicate
+          required: true
+        - label: I have included all necessary information to understand and implement this feature
+          required: true

@@ -1,0 +1,274 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": "https://raw.githubusercontent.com/K4ryuu/CS2-Egg-Go/main/pterodactyl/kitsunelab-cs2-go-egg-standalone.json"
+    },
+    "exported_at": "2026-09-22T16:51:51+00:00",
+    "name": "KitsuneLab CS2 Go @ K4ryuu (standalone, no node daemon)",
+    "author": "k4ryuu@icloud.com",
+    "description": "CS2 servers for Pterodactyl and Pelican with no shell in the image: one static Go binary boots the server, and an optional node daemon shares the game files, filters bot floods and caches workshop content. The successor of the bash KitsuneLab CS2 egg.",
+    "features": [],
+    "docker_images": {
+        "KitsuneLab CS2 Go - Stable": "ghcr.io/k4ryuu/cs2-egg-go:stable",
+        "KitsuneLab CS2 Go - Beta": "ghcr.io/k4ryuu/cs2-egg-go:beta"
+    },
+    "file_denylist": [],
+    "startup": "./game/cs2.sh {{CUSTOM_PARAMS}} -dedicated +ip 0.0.0.0 -port {{SERVER_PORT}} +map {{SRCDS_MAP}} -maxplayers {{SRCDS_MAXPLAYERS}} +sv_setsteamaccount {{STEAM_ACC}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}}",
+    "config": {
+        "files": "{}",
+        "startup": "{\r\n    \"done\": \"Source2Init OK\"\r\n}",
+        "logs": "{}",
+        "stop": "quit"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Dummy install script - actual installation happens on first startup\nexit 0",
+            "container": "ghcr.io/pterodactyl/installers:debian",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Allow Tokenless Servers",
+            "description": "Internal setting to allow servers to run without GSLT token.",
+            "env_variable": "ALLOW_TOKENLESS",
+            "default_value": "0",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Source AppID",
+            "description": "NOT VISIBLE TO USERS. DO NOT EDIT.",
+            "env_variable": "SRCDS_APPID",
+            "default_value": "730",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|numeric",
+            "field_type": "text"
+        },
+        {
+            "name": "Max Players",
+            "description": "The maximum number of players the server can host.",
+            "env_variable": "SRCDS_MAXPLAYERS",
+            "default_value": "32",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|numeric|max:64|min:5",
+            "field_type": "text"
+        },
+        {
+            "name": "Disable Updates",
+            "description": "Set to 1 to stop updates.",
+            "env_variable": "SRCDS_STOP_UPDATE",
+            "default_value": "0",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|numeric",
+            "field_type": "text"
+        },
+        {
+            "name": "Validate Install",
+            "description": "Toggles SteamCMD validation of game server files. Set to 0 to disable.",
+            "env_variable": "SRCDS_VALIDATE",
+            "default_value": "0",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "required|numeric",
+            "field_type": "text"
+        },
+        {
+            "name": "Game Server Login Token (GSLT)",
+            "description": "The Steam Game Server Login Token (GSLT) used to publicly list your server. Optional, but recommended for increased visibility and access to additional features. Learn more: https://steamcommunity.com/dev/managegameservers",
+            "env_variable": "STEAM_ACC",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "max:32|nullable",
+            "field_type": "text"
+        },
+        {
+            "name": "Map",
+            "description": "The default map for the server.",
+            "env_variable": "SRCDS_MAP",
+            "default_value": "de_dust2",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|alpha_dash",
+            "field_type": "text"
+        },
+        {
+            "name": "Game Type",
+            "description": "",
+            "env_variable": "GAME_TYPE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|in:0,1,2,3,4,5,6",
+            "field_type": "text"
+        },
+        {
+            "name": "Game Mode",
+            "description": "",
+            "env_variable": "GAME_MODE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|numeric|in:0,1,2,3,4",
+            "field_type": "text"
+        },
+        {
+            "name": "MetaMod:Source",
+            "description": "Base plugin framework required by CounterStrikeSharp. Compatible with all frameworks. Auto-enabled if CSS is selected. Automatically updates on server restart while enabled.",
+            "env_variable": "INSTALL_METAMOD",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "CounterStrikeSharp",
+            "description": "C# scripting platform for CS2 plugins. Requires MetaMod:Source (auto-enabled). Compatible with SwiftlyS2. Incompatible with ModSharp. Automatically updates on server restart while enabled.",
+            "env_variable": "INSTALL_CSS",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "SwiftlyS2",
+            "description": "Standalone C# framework for Source Engine 2 servers (no MetaMod required). Compatible with CSS. Incompatible with ModSharp. Automatically updates on server restart while enabled.",
+            "env_variable": "INSTALL_SWIFTLY",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "ModSharp",
+            "description": "Standalone C# scripting platform with .NET 9 runtime. Compatible with MetaMod only. Incompatible with CSS and SwiftlyS2 (auto-disabled if enabled). Automatically updates on server restart while enabled.",
+            "env_variable": "INSTALL_MODSHARP",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Allow Prerelease Updates",
+            "description": "Allow downloading prerelease/beta versions of frameworks (CSS, SwiftlyS2, ModSharp) from GitHub. Warning: Prereleases may be unstable.",
+            "env_variable": "PRERELEASE",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Console Log Level",
+            "description": "Minimum level shown in the console: DEBUG, INFO, WARNING or ERROR. DEBUG shows what the egg decided and why. Overrides logging.json's console_level when set. Leave empty to use the config file's value.",
+            "env_variable": "CONSOLE_LOG_LEVEL",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|in:DEBUG,INFO,WARNING,ERROR",
+            "field_type": "text"
+        },
+        {
+            "name": "Console Filter",
+            "description": "Filter unwanted console messages. Configure filter patterns in /egg/configs/console-filter.json",
+            "env_variable": "ENABLE_FILTER",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Bot Guard",
+            "description": "Behaviour-based connection defense against advertising/console-spam bots. Detects clients that never finish signon yet act or persist, and temporarily blocks them. Starts in dry-run (log only); tune and enable blocking in /egg/configs/guard.json.",
+            "env_variable": "ENABLE_GUARD",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "Guard Action",
+            "description": "What Bot Guard does when a rule trips: log (dry-run, detect only), kick, or block (kick + temporary IP ban). Overrides guard.json's action when set, empty uses the file's value. Only matters with Bot Guard on.",
+            "env_variable": "GUARD_ACTION",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|in:log,kick,block",
+            "field_type": "text"
+        },
+        {
+            "name": "Guard Ban Minutes",
+            "description": "How long a block lasts, in minutes, when Bot Guard's action is kick or block. Overrides guard.json's ban_minutes when set, empty uses the file's value. Only matters with Bot Guard on.",
+            "env_variable": "GUARD_BAN_MINUTES",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|numeric|min:1",
+            "field_type": "text"
+        },
+        {
+            "name": "Guard Whitelist SteamIDs",
+            "description": "Comma-separated SteamID64s Bot Guard never acts on. Overrides guard.json's whitelist_steamids when set, empty uses the file's value. Only matters with Bot Guard on.",
+            "env_variable": "GUARD_WHITELIST_STEAMIDS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Guard Whitelist IPs",
+            "description": "Comma-separated IPs Bot Guard never acts on. Overrides guard.json's whitelist_ips when set, empty uses the file's value. Only matters with Bot Guard on.",
+            "env_variable": "GUARD_WHITELIST_IPS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string",
+            "field_type": "text"
+        },
+        {
+            "name": "Custom Parameters",
+            "description": "Custom startup parameters to add to the command line.",
+            "env_variable": "CUSTOM_PARAMS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "string|nullable",
+            "field_type": "text"
+        },
+        {
+            "name": "Auto Cleanup",
+            "description": "Automatically cleans up old logs, demos, and backup files. Configure cleanup intervals in /egg/configs/cleanup.json",
+            "env_variable": "CLEANUP_ENABLED",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|boolean",
+            "field_type": "text"
+        },
+        {
+            "name": "GDB Remote Debug Port",
+            "description": "GDB remote debugging port for IDA. Specify port number (e.g., 27130) and allocate it in network settings. Connect: IDA → Debugger → Remote GDB debugger. Performance impact: ~5-10%. Leave empty to disable. Development only!",
+            "env_variable": "GDB_DEBUG_PORT",
+            "default_value": "",
+            "user_viewable": false,
+            "user_editable": false,
+            "rules": "nullable|numeric",
+            "field_type": "text"
+        }
+    ],
+    "uuid": "97bb2e16-abbe-446e-aa4c-715be51f2d70"
+}

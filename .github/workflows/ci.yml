@@ -1,0 +1,31 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# nothing here writes anything back to the repository
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      # the daemon runs one goroutine per container plus the samplers; a
+      # race here is a production bug, not a test flake
+      - run: go test -race ./tests/...
+      - run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./...
+      # a known CVE in a dependency is a build failure, not a thing to
+      # notice later: x/net shipped 12 of them behind the docker client
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...

@@ -1,0 +1,93 @@
+name: release
+
+# A GitHub release drives everything. Publish one and this builds the node
+# binary, hashes it and attaches both to that release. Tick "set as a
+# pre-release" and it belongs to the beta channel; leave it clear and it is
+# what the stable channel installs. There is no release branch: the tag you
+# release from is the source of truth.
+#
+# scripts/release.sh creates that release (asset-less); this workflow is the
+# only thing that ever uploads the binary, so they never race on the same asset.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and attach to"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - name: pick the release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          prerelease=$(gh release view "$TAG" --json isPrerelease -q .isPrerelease)
+          version="${TAG#v}"
+          case "$prerelease" in
+            true)  channel=beta ;;
+            false) channel=stable ;;
+            *) echo "could not read the release $TAG" >&2; exit 1 ;;
+          esac
+          # a prerelease tag with no prerelease flag would install itself on
+          # every stable node, so refuse rather than guess
+          if [ "$prerelease" = "false" ] && printf '%s' "$version" | grep -q -- '-'; then
+            echo "$TAG looks like a prerelease but is not marked as one" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.rel.outputs.tag }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - run: go vet ./... && go test ./...
+
+      - name: build
+        env:
+          VERSION: ${{ steps.rel.outputs.version }}
+          CHANNEL: ${{ steps.rel.outputs.channel }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+            -ldflags "-s -w -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Version=${VERSION} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Channel=${CHANNEL} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Commit=${COMMIT::7} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Built=$(date -u +%Y-%m-%dT%H:%MZ)" \
+            -o dist/cs2node_linux_amd64 ./cmd/cs2node
+          (cd dist && sha256sum cs2node_linux_amd64 > checksums.txt)
+
+      - name: attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: gh release upload "$TAG" dist/cs2node_linux_amd64 dist/checksums.txt --clobber
+
+      - name: verify what the node will download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ steps.rel.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify && cd verify
+          gh release download "$TAG" -p cs2node_linux_amd64 -p checksums.txt --clobber
+          sha256sum -c checksums.txt
+          chmod +x cs2node_linux_amd64 && ./cs2node_linux_amd64 version

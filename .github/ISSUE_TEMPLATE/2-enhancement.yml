@@ -1,0 +1,46 @@
+name: Enhancement Request
+description: Suggest an improvement to an existing feature
+title: "[Enhancement]: "
+labels: ["enhancement"]
+projects: ["K4ryuu/8"]
+assignees:
+  - K4ryuu
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an enhancement! Please describe how you'd like to improve an existing feature.
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this enhancement?
+      options:
+        - Low - Nice to have improvement
+        - Medium - Would improve user experience
+        - High - Important for many users
+        - Critical - Essential enhancement
+      default: 0
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Enhancement Description
+      description: Describe how you'd like to improve this existing feature. Include what currently exists and your proposed changes.
+      placeholder: Currently the feature... I would like to improve it by...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues and confirmed this is not a duplicate
+          required: true
+        - label: I have included all necessary information to understand and implement this enhancement
+          required: true

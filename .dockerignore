@@ -1,0 +1,12 @@
+.git
+.github
+.claude
+assets
+docs
+misc
+tests
+dist
+pterodactyl
+*.md
+CHANGELOG
+scripts
