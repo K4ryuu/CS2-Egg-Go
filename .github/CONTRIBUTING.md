@@ -42,7 +42,7 @@ What gets a PR merged quickly:
 
 **Tests live in `tests/`, never next to the source**, as external packages. If a test needs something unexported, the seam is in the wrong place.
 
-**Nothing from a container is trusted.** Every write into a server volume goes through a path-restricted root, every message is bounded, every path is validated. See the [security model](../docs/security.md) before touching anything on that boundary.
+**Nothing from a container is trusted.** Every write into a server volume goes through a path-restricted root, every message is bounded, every path is validated. See the [security model](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/docs/security.md) before touching anything on that boundary.
 
 **No shell.** The image has no shell scripts and the daemon does not spawn one. SteamCMD is invoked with an argument list.
 
@@ -52,8 +52,8 @@ Comment why, not what. Exported functions get a doc comment saying what a caller
 
 ## Where things are
 
-[Architecture](../docs/development/architecture.md) has the map, [building](../docs/development/building.md) has the commands, [testing](../docs/development/testing.md) has the layout of the suites.
+[Architecture](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/docs/development/architecture.md) has the map, [building](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/docs/development/building.md) has the commands, [testing](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/docs/development/testing.md) has the layout of the suites.
 
 ## Licence
 
-By contributing you agree your work ships under the repository's [licence](../LICENSE), the GNU General Public License v3 or later. That means anyone who distributes a modified `cs2egg` or `cs2node`, or an image built from them, has to hand over the source of their changes on the same terms.
+By contributing you agree your work ships under the repository's [licence](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/LICENSE), the GNU General Public License v3 or later. That means anyone who distributes a modified `cs2egg` or `cs2node`, or an image built from them, has to hand over the source of their changes on the same terms.

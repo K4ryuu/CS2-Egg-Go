@@ -20,7 +20,7 @@ So these are the reports worth sending:
 - A way to make the daemon fetch from a host it should never fetch from.
 - A way to bypass the checksum verification on a self-update.
 
-The [security model](../docs/security.md) describes what the daemon already assumes and guards against. If you found a way around one of those guarantees, that is exactly the report to send.
+The [security model](https://github.com/K4ryuu/CS2-Egg-Go/blob/main/docs/security.md) describes what the daemon already assumes and guards against. If you found a way around one of those guarantees, that is exactly the report to send.
 
 ## What does not count
 
