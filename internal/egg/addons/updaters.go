@@ -377,6 +377,10 @@ func (e *Env) UpdateAll(ctx context.Context, sel Selection, allowTokenless bool)
 	case changed:
 		e.Log.Log(logx.Success, "MetaMod repositioned successfully")
 	}
+	// backup_round*.txt snapshots need their own search path, ahead of
+	// MetaMod, or the engine writes them into MetaMod's addon dir
+	os.MkdirAll(filepath.Join(e.Root, "game", "csgo", "backups"), 0o755)
+	e.addPath(gi, "csgo/backups")
 	if _, err := gi.SetTokenless(allowTokenless); err != nil && !errors.Is(err, errNoGameinfo) {
 		e.Log.Logf(logx.Error, "Failed to patch RequireLoginForDedicatedServers: %v", err)
 	}

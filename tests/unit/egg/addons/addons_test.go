@@ -287,6 +287,12 @@ func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	if !strings.Contains(string(gi), "Game    csgo/addons/metamod") {
 		t.Fatal("gameinfo not patched")
 	}
+	if _, err := os.Stat(filepath.Join(root, "game/csgo/backups")); err != nil {
+		t.Fatal("backups directory not created")
+	}
+	if backups, mm := strings.Index(string(gi), "Game    csgo/backups"), strings.Index(string(gi), "Game    csgo/addons/metamod"); backups < 0 || mm < 0 || backups > mm {
+		t.Fatalf("backups must sit ahead of metamod in the search order: %s", gi)
+	}
 	if _, err := os.Stat(filepath.Join(root, "temps")); err == nil {
 		t.Fatal("temp dir must be removed")
 	}
