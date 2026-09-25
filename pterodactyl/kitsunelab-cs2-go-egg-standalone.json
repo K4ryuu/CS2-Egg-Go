@@ -203,7 +203,7 @@
             "name": "Guard Action",
             "description": "What Bot Guard does when a rule trips: log (dry-run, detect only), kick, or block (kick + temporary IP ban). Overrides guard.json's action when set, empty uses the file's value. Only matters with Bot Guard on.",
             "env_variable": "GUARD_ACTION",
-            "default_value": "",
+            "default_value": "block",
             "user_viewable": true,
             "user_editable": true,
             "rules": "nullable|in:log,kick,block",
