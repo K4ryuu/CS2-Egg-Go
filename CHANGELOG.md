@@ -2,6 +2,16 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.0.1] - 2026-09-25
+
+### Fixed
+
+- The engine's own `backup_round*.txt` snapshots were landing inside MetaMod's addon directory, because MetaMod sat first in the `gameinfo.gi` search path. Every addon update pass now gives them their own `csgo/backups` path ahead of MetaMod.
+
+### Docs
+
+- Community health file links now point at absolute GitHub URLs instead of repo-relative ones, so they resolve correctly wherever they are rendered.
+
 ## [1.0.0] - 2026-09-23
 
 The whole thing rewritten in Go. Two binaries, no shell anywhere, and the node side split into modules you switch on one by one.
