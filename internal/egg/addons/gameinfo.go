@@ -16,8 +16,8 @@ func GameinfoLine(addon string) string { return "            Game    " + addon }
 
 var (
 	lowViolence = regexp.MustCompile(`Game_LowViolence`)
-	gameEntry   = regexp.MustCompile(`^\s*Game\s`)
 	metamodLine = regexp.MustCompile(`Game.*csgo/addons/metamod`)
+	backupsLine = regexp.MustCompile(`Game.*csgo/backups`)
 	tokenless   = regexp.MustCompile(`(RequireLoginForDedicatedServers"\s*)"([0-9])"`)
 )
 
@@ -41,14 +41,15 @@ func addGamePath(content, addon string) (string, bool) {
 	return content, false
 }
 
-// metamodFirst moves the metamod entry directly under Game_LowViolence when
-// another Game entry sits in between: Metamod must load before every addon.
+// metamod needs to sit right after backups if backups exists, not the other
+// way round - it's not an addon, just the engine's dump path, so don't treat
+// it like a stray one or it gets shoved below metamod again next boot
 func metamodFirst(content string) (string, bool) {
 	if !metamodLine.MatchString(content) {
 		return content, false
 	}
 	lines := strings.Split(content, "\n")
-	lv, mm := -1, -1
+	lv, mm, bk := -1, -1, -1
 	for i, l := range lines {
 		if lv < 0 && lowViolence.MatchString(l) {
 			lv = i
@@ -56,27 +57,27 @@ func metamodFirst(content string) (string, bool) {
 		if mm < 0 && metamodLine.MatchString(l) {
 			mm = i
 		}
+		if bk < 0 && backupsLine.MatchString(l) {
+			bk = i
+		}
 	}
 	if lv < 0 || mm < 0 {
 		return content, false
 	}
-	between := false
-	for i := lv + 1; i < mm; i++ {
-		if gameEntry.MatchString(lines[i]) {
-			between = true
-			break
-		}
+	anchor := lv
+	if bk >= 0 {
+		anchor = bk
 	}
-	if !between {
+	if mm == anchor+1 {
 		return content, false
 	}
 	var out []string
 	for i, l := range lines {
-		if metamodLine.MatchString(l) {
+		if i == mm {
 			continue
 		}
 		out = append(out, l)
-		if i == lv {
+		if i == anchor {
 			out = append(out, GameinfoLine("csgo/addons/metamod"))
 		}
 	}

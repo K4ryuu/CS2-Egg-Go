@@ -246,6 +246,53 @@ func TestGameinfoAddOrderAndTokenless(t *testing.T) {
 	}
 }
 
+// metamod used to get shoved back above backups on every run after the
+// first, since backups looked like a stray addon. check it self-heals too,
+// not just that it stays put once already fixed.
+func TestMetamodFirstStaysBelowBackupsAcrossRepeatedRuns(t *testing.T) {
+	broken := `"GameInfo"
+{
+	FileSystem
+	{
+		SearchPaths
+		{
+			Game_LowViolence	csgo_lv // Perfect World content override
+			Game	csgo/addons/metamod
+			Game	csgo/backups
+			Game	csgo
+			Game	core
+		}
+	}
+	"RequireLoginForDedicatedServers"	"1"
+}
+`
+	p := filepath.Join(t.TempDir(), "gameinfo.gi")
+	os.WriteFile(p, []byte(broken), 0o644)
+	gi := addons.Gameinfo{Path: p}
+
+	if changed, err := gi.MetamodFirst(); err != nil || !changed {
+		t.Fatalf("first run must fix the broken order: %v %v", changed, err)
+	}
+	data, _ := os.ReadFile(p)
+	if backups, mm := strings.Index(string(data), "csgo/backups"), strings.Index(string(data), "csgo/addons/metamod"); backups < 0 || mm < 0 || backups > mm {
+		t.Fatalf("backups must sit ahead of metamod after the fix: %s", data)
+	}
+
+	for i := 0; i < 3; i++ {
+		if changed, err := gi.MetamodFirst(); err != nil || changed {
+			t.Fatalf("run %d: already-correct order must be a no-op, got changed=%v err=%v", i, changed, err)
+		}
+		data, _ := os.ReadFile(p)
+		backups, mm := strings.Index(string(data), "csgo/backups"), strings.Index(string(data), "csgo/addons/metamod")
+		if backups < 0 || mm < 0 || backups > mm {
+			t.Fatalf("run %d: backups must stay ahead of metamod: %s", i, data)
+		}
+		if strings.Count(string(data), "csgo/addons/metamod") != 1 {
+			t.Fatalf("run %d: metamod must not duplicate: %s", i, data)
+		}
+	}
+}
+
 func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
