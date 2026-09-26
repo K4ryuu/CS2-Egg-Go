@@ -96,14 +96,18 @@ type Options struct {
 }
 
 // Args builds the steamcmd argument list; the login password is masked in
-// the returned display string.
+// the returned display string. force_install_dir has to come before login,
+// otherwise steamcmd warns and app_update can fail with a confused app state.
 func (o Options) Args(root string) (args []string, display string) {
+	args = append(args, "+force_install_dir", root)
+	pwIndex := -1
 	if o.Login != "" {
 		args = append(args, "+login", o.Login, o.Password)
+		pwIndex = len(args) - 1
 	} else {
 		args = append(args, "+login", "anonymous")
 	}
-	args = append(args, "+force_install_dir", root, "+app_update", o.AppID)
+	args = append(args, "+app_update", o.AppID)
 	if o.BetaID != "" {
 		args = append(args, "-beta", o.BetaID)
 		if o.BetaPass != "" {
@@ -115,8 +119,8 @@ func (o Options) Args(root string) (args []string, display string) {
 	}
 	args = append(args, "+quit")
 	shown := append([]string{}, args...)
-	if o.Login != "" {
-		shown[2] = "****"
+	if pwIndex >= 0 {
+		shown[pwIndex] = "****"
 	}
 	return args, strings.Join(shown, " ")
 }
