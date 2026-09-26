@@ -2,6 +2,17 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.0.2] - 2026-09-26
+
+### Fixed
+
+- `csgo/backups` could get pushed back below MetaMod on every restart after the first, since the reorder pass mistook it for a stray addon. It now stays anchored ahead of MetaMod for good.
+- SteamCMD's `+login` ran before `+force_install_dir`, which triggers a warning and can leave `app_update` in a confused state. `+force_install_dir` now comes first.
+
+### Guard
+
+- `GUARD_ACTION` panel variable now defaults to `block` instead of empty.
+
 ## [1.0.1] - 2026-09-25
 
 ### Fixed
