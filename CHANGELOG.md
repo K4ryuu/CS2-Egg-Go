@@ -2,6 +2,14 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.0.3] - 2026-10-13
+
+### Fixed
+
+- A server running MetaMod:Source and CounterStrikeSharp never stopped: CounterStrikeSharp's shutdown hook can hang after the engine has finished, and the container stayed up until it was killed from the panel ([#3](https://github.com/K4ryuu/CS2-Egg-Go/issues/3)). The egg now ends the server as soon as the engine logs its own shutdown.
+- A stop could leave the engine running behind the egg. `cs2.sh` does not replace itself with the engine, so a timed-out stop killed only the shell and orphaned the engine. The whole process tree is killed now.
+- The 30 second stop timeout applies to a `quit` from the panel's Stop button or the console too, not only to a container stop signal.
+
 ## [1.0.2] - 2026-09-26
 
 ### Fixed
