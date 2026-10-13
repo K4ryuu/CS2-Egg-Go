@@ -254,7 +254,7 @@ func Run(ctx context.Context, env Env) int {
 		log.Log(logx.Warning, "Server will wait for debugger connection before starting")
 	}
 	cmd.Cancel = func() error { return nil } // the supervisor stops it gracefully
-	srv := &supervisor.Server{Cmd: cmd, Stdin: env.Stdin, StopCommand: "quit", Grace: 30 * time.Second}
+	srv := &supervisor.Server{Cmd: cmd, Stdin: env.Stdin, StopCommand: "quit", Grace: 30 * time.Second, Idle: 2 * time.Second}
 	pipeline.Stopping = srv.Stopping
 
 	// the egg's own picture of the server, reported to the node on change,

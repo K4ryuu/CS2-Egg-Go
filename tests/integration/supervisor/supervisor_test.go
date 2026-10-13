@@ -150,43 +150,61 @@ func TestOnInputSeesTypedCommandsOnly(t *testing.T) {
 	}
 }
 
-// A plugin can hang the engine's shutdown after a typed quit: the egg must
-// still kill the whole tree, grandchildren holding the pty included.
-func TestTypedQuitThatHangsIsKilledAfterGrace(t *testing.T) {
+// A child left holding the terminal must not keep the run alive once the
+// server process itself has exited.
+func TestRunEndsWhenTheProcessExitsEvenIfAChildHoldsTheTerminal(t *testing.T) {
+	var mu sync.Mutex
+	var lines []string
+	s := &supervisor.Server{
+		Cmd: exec.Command("sh", "-c", "trap '' HUP; sleep 30 & echo bye"),
+		Line: func(l string) {
+			mu.Lock()
+			lines = append(lines, l)
+			mu.Unlock()
+		},
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- s.Run(context.Background()) }()
+	select {
+	case <-errc:
+	case <-time.After(5 * time.Second):
+		t.Fatal("run waited on the leftover child")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if strings.Join(lines, "|") != "bye" {
+		t.Fatalf("lines: %q", lines)
+	}
+}
+
+// A server that goes silent after a stop and never exits is killed once
+// it has been quiet for Idle; one that keeps talking is left alone.
+func TestSilentServerIsKilledAfterAStop(t *testing.T) {
 	r, w, _ := os.Pipe()
 	s := &supervisor.Server{
-		Cmd:   exec.Command("sh", "-c", "sleep 600 & while read x; do echo ignored; done"),
+		Cmd:   exec.Command("sh", "-c", "read x; for i in 1 2 3 4 5; do echo busy; sleep 0.2; done; sleep 60"),
 		Stdin: r,
 		Line:  func(string) {},
-		Grace: 300 * time.Millisecond,
+		Idle:  500 * time.Millisecond,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- s.Run(context.Background()) }()
 	time.Sleep(300 * time.Millisecond)
+	start := time.Now()
 	w.Write([]byte("quit\n"))
 	select {
 	case <-errc:
-	case <-time.After(5 * time.Second):
-		t.Fatal("a hung quit was never killed")
+	case <-time.After(10 * time.Second):
+		t.Fatal("silent server was not killed")
+	}
+	if d := time.Since(start); d < time.Second {
+		t.Fatalf("killed after %v, while it was still printing", d)
 	}
 }
 
-// Once the engine logged its own shutdown, nothing useful is left: a plugin
-// hook hanging after it must not hold the container for the grace period.
-func TestEngineShutdownLineKillsTheTreeAtOnce(t *testing.T) {
-	s := &supervisor.Server{
-		Cmd:   exec.Command("sh", "-c", "sleep 600 & echo ShutdownSource2Logging; echo 'CSSharp: CGameSystem::Shutdown'; while :; do sleep 1; done"),
-		Line:  func(string) {},
-		Grace: time.Minute,
-	}
-	errc := make(chan error, 1)
-	go func() { errc <- s.Run(context.Background()) }()
-	select {
-	case <-errc:
-	case <-time.After(3 * time.Second):
-		t.Fatal("the tree outlived the engine's shutdown")
-	}
-	if !s.Stopping() {
-		t.Fatal("a finished engine shutdown is a stop, not a crash")
+func TestIdleDoesNothingBeforeAStop(t *testing.T) {
+	s := &supervisor.Server{Cmd: exec.Command("sh", "-c", "sleep 1.5; echo bye"), Line: func(string) {}, Idle: 300 * time.Millisecond}
+	if err := s.Run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
 	}
 }
