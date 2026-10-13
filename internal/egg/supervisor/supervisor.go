@@ -30,15 +30,23 @@ type Server struct {
 	// reaches the server. Commands the egg injects itself do not go here.
 	OnInput func(cmd string)
 	Line    func(string) // every output line, in order, without the newline
-	// StopCommand is written when ctx is cancelled; the process gets Grace
-	// to exit before it is killed.
+	// StopCommand is written when ctx is cancelled. After that or a typed
+	// quit, the process tree gets Grace to exit before it is killed.
 	StopCommand string
 	Grace       time.Duration
 
 	mu       sync.Mutex
 	ptmx     *os.File
 	stopping atomic.Bool
+	stopReq  chan struct{}
+	stopOnce sync.Once
 	partial  []byte // stdin bytes since the last newline, to spot a typed "quit"
+}
+
+// requestStop marks the run as stopping and starts the kill timer.
+func (s *Server) requestStop() {
+	s.stopping.Store(true)
+	s.stopOnce.Do(func() { close(s.stopReq) })
 }
 
 // Stopping reports whether a stop was asked for: the panel typed quit (or
@@ -57,7 +65,7 @@ func (s *Server) noteInput(b []byte, fromPanel bool) {
 		line := strings.TrimSpace(string(s.partial))
 		switch strings.ToLower(line) {
 		case "quit", "exit":
-			s.stopping.Store(true)
+			s.requestStop()
 		}
 		if line != "" && fromPanel && s.OnInput != nil {
 			s.OnInput(line)
@@ -82,6 +90,7 @@ func (s *Server) Send(cmd string) error {
 // Run starts the server and returns when it has exited. The returned error
 // is the process's exit error, if any.
 func (s *Server) Run(ctx context.Context) error {
+	s.stopReq = make(chan struct{})
 	ptmx, err := pty.Start(s.Cmd)
 	if err != nil {
 		return err
@@ -140,27 +149,29 @@ func (s *Server) Run(ctx context.Context) error {
 	go func() {
 		select {
 		case <-ctx.Done():
-			s.stopping.Store(true)
 			if s.StopCommand != "" {
 				s.Send(s.StopCommand)
 			}
-			grace := s.Grace
-			if grace == 0 {
-				grace = 30 * time.Second
-			}
-			select {
-			case <-stopped:
-			case <-time.After(grace):
-				if pid := s.Cmd.Process.Pid; pid > 0 {
-					syscall.Kill(-pid, syscall.SIGKILL)
-				}
-				s.mu.Lock()
-				if s.ptmx != nil {
-					s.ptmx.Close()
-				}
-				s.mu.Unlock()
-			}
+			s.requestStop()
+		case <-s.stopReq:
 		case <-stopped:
+			return
+		}
+		grace := s.Grace
+		if grace == 0 {
+			grace = 30 * time.Second
+		}
+		select {
+		case <-stopped:
+		case <-time.After(grace):
+			if pid := s.Cmd.Process.Pid; pid > 0 {
+				syscall.Kill(-pid, syscall.SIGKILL)
+			}
+			s.mu.Lock()
+			if s.ptmx != nil {
+				s.ptmx.Close()
+			}
+			s.mu.Unlock()
 		}
 	}()
 

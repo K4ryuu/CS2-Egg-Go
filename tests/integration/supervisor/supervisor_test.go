@@ -149,3 +149,24 @@ func TestOnInputSeesTypedCommandsOnly(t *testing.T) {
 		t.Fatalf("want the typed line only, got %q", typed)
 	}
 }
+
+// A plugin can hang the engine's shutdown after a typed quit: the egg must
+// still kill the whole tree, grandchildren holding the pty included.
+func TestTypedQuitThatHangsIsKilledAfterGrace(t *testing.T) {
+	r, w, _ := os.Pipe()
+	s := &supervisor.Server{
+		Cmd:   exec.Command("sh", "-c", "sleep 600 & while read x; do echo ignored; done"),
+		Stdin: r,
+		Line:  func(string) {},
+		Grace: 300 * time.Millisecond,
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- s.Run(context.Background()) }()
+	time.Sleep(300 * time.Millisecond)
+	w.Write([]byte("quit\n"))
+	select {
+	case <-errc:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a hung quit was never killed")
+	}
+}
