@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/creack/pty"
@@ -150,7 +151,14 @@ func (s *Server) Run(ctx context.Context) error {
 			select {
 			case <-stopped:
 			case <-time.After(grace):
-				s.Cmd.Process.Kill()
+				if pid := s.Cmd.Process.Pid; pid > 0 {
+					syscall.Kill(-pid, syscall.SIGKILL)
+				}
+				s.mu.Lock()
+				if s.ptmx != nil {
+					s.ptmx.Close()
+				}
+				s.mu.Unlock()
 			}
 		case <-stopped:
 		}
