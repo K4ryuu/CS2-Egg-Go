@@ -43,6 +43,19 @@ type Server struct {
 	partial  []byte // stdin bytes since the last newline, to spot a typed "quit"
 }
 
+// kill ends the whole process tree: cs2.sh does not exec, so the engine is
+// a grandchild that a single-pid kill would orphan.
+func (s *Server) kill() {
+	if pid := s.Cmd.Process.Pid; pid > 0 {
+		syscall.Kill(-pid, syscall.SIGKILL)
+	}
+	s.mu.Lock()
+	if s.ptmx != nil {
+		s.ptmx.Close()
+	}
+	s.mu.Unlock()
+}
+
 // requestStop marks the run as stopping and starts the kill timer.
 func (s *Server) requestStop() {
 	s.stopping.Store(true)
@@ -141,7 +154,12 @@ func (s *Server) Run(ctx context.Context) error {
 		sc := bufio.NewScanner(ptmx)
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 		for sc.Scan() {
-			s.Line(strings.TrimRight(sc.Text(), "\r"))
+			line := strings.TrimRight(sc.Text(), "\r")
+			s.Line(line)
+			if strings.Contains(line, "ShutdownSource2Logging") {
+				s.requestStop()
+				s.kill()
+			}
 		}
 	}()
 
@@ -164,14 +182,7 @@ func (s *Server) Run(ctx context.Context) error {
 		select {
 		case <-stopped:
 		case <-time.After(grace):
-			if pid := s.Cmd.Process.Pid; pid > 0 {
-				syscall.Kill(-pid, syscall.SIGKILL)
-			}
-			s.mu.Lock()
-			if s.ptmx != nil {
-				s.ptmx.Close()
-			}
-			s.mu.Unlock()
+			s.kill()
 		}
 	}()
 

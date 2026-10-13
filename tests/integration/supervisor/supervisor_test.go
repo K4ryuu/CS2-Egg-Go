@@ -170,3 +170,23 @@ func TestTypedQuitThatHangsIsKilledAfterGrace(t *testing.T) {
 		t.Fatal("a hung quit was never killed")
 	}
 }
+
+// Once the engine logged its own shutdown, nothing useful is left: a plugin
+// hook hanging after it must not hold the container for the grace period.
+func TestEngineShutdownLineKillsTheTreeAtOnce(t *testing.T) {
+	s := &supervisor.Server{
+		Cmd:   exec.Command("sh", "-c", "sleep 600 & echo ShutdownSource2Logging; echo 'CSSharp: CGameSystem::Shutdown'; while :; do sleep 1; done"),
+		Line:  func(string) {},
+		Grace: time.Minute,
+	}
+	errc := make(chan error, 1)
+	go func() { errc <- s.Run(context.Background()) }()
+	select {
+	case <-errc:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the tree outlived the engine's shutdown")
+	}
+	if !s.Stopping() {
+		t.Fatal("a finished engine shutdown is a stop, not a crash")
+	}
+}
