@@ -57,9 +57,9 @@ func appUpdate(ctx context.Context, steamcmdDir, cs2Dir string, validate bool, o
 	for _, pair := range [][2]string{{"linux32", "sdk32"}, {"linux64", "sdk64"}} {
 		src := filepath.Join(steamcmdDir, pair[0], "steamclient.so")
 		dst := filepath.Join(cs2Dir, ".steam", pair[1], "steamclient.so")
-		copyFile(src, dst)
+		CopyChanged(src, dst)
 	}
-	worldReadable(cs2Dir)
+	WorldReadable(cs2Dir)
 	id := BuildID(cs2Dir)
 	if id == "" {
 		return "", errNoBuild
@@ -67,8 +67,8 @@ func appUpdate(ctx context.Context, steamcmdDir, cs2Dir string, validate bool, o
 	return id, nil
 }
 
-// worldReadable is chmod -R u=rwX,go=rX.
-func worldReadable(root string) {
+// WorldReadable is chmod -R u=rwX,go=rX, skipping what already matches.
+func WorldReadable(root string) {
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.Type()&fs.ModeSymlink != 0 {
 			return nil
@@ -77,11 +77,12 @@ func worldReadable(root string) {
 		if err != nil {
 			return nil
 		}
-		mode := info.Mode().Perm()
+		mode, want := info.Mode().Perm(), os.FileMode(0o644)
 		if d.IsDir() || mode&0o111 != 0 {
-			os.Chmod(path, 0o755)
-		} else {
-			os.Chmod(path, 0o644)
+			want = 0o755
+		}
+		if mode != want {
+			os.Chmod(path, want)
 		}
 		return nil
 	})

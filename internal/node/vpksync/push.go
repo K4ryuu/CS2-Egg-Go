@@ -395,8 +395,16 @@ func BuildID(dir string) string {
 	return ""
 }
 
-// copyFile is a plain copy for the central dir (root's own, no volume).
-func copyFile(src, dst string) error {
+// CopyChanged is a plain copy for the central dir (root's own, no volume).
+// A dst with src's size that is not older than src is left alone.
+func CopyChanged(src, dst string) error {
+	si, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if di, err := os.Stat(dst); err == nil && di.Size() == si.Size() && !di.ModTime().Before(si.ModTime()) {
+		return nil
+	}
 	in, err := os.Open(src)
 	if err != nil {
 		return err

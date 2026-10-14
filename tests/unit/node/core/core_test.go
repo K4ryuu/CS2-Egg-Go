@@ -463,3 +463,37 @@ func TestNoticesCarryTheServerName(t *testing.T) {
 		t.Fatalf("a start notice before the egg reports must use the remembered name, got %q", got)
 	}
 }
+
+// a daemon (re)start finds servers that were already running: that is not
+// a "server up", only a container that starts after it is
+func TestNoStartNoticeForServersAlreadyUp(t *testing.T) {
+	cont := core.Container{ID: "1", Name: "59e9667c", Image: "sples1/k4ryuu-cs2:dev"}
+	fd := &fakeDocker{running: []core.Container{cont}, events: make(chan core.Event)}
+	c := core.New(fd, nodeconfig.Default(), []string{"alerts"}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	starts := make(chan struct{}, 4)
+	c.OnNotify(func(n core.Notice) {
+		if n.Kind == core.NoticeServerStart {
+			starts <- struct{}{}
+		}
+	})
+	events, unsub := c.Subscribe()
+	defer unsub()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	waitFor(t, events, core.Start)
+	select {
+	case <-starts:
+		t.Fatal("start notice for a server that was already running")
+	case <-time.After(200 * time.Millisecond):
+	}
+	fd.events <- core.Event{Kind: core.Die, Container: cont}
+	waitFor(t, events, core.Die)
+	fd.events <- core.Event{Kind: core.Start, Container: cont}
+	waitFor(t, events, core.Start)
+	select {
+	case <-starts:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no start notice for a real start")
+	}
+}

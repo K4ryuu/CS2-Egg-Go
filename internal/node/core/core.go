@@ -51,6 +51,7 @@ type Core struct {
 	providers map[string]func() any
 	remote    *Status
 	notifiers []chan Notice
+	synced    bool // first reconcile done; servers found before it were already up
 }
 
 type entry struct {
@@ -387,6 +388,9 @@ func (c *Core) reconcile(ctx context.Context) error {
 	for _, cont := range gone {
 		c.handle(Event{Kind: Die, Container: cont})
 	}
+	c.mu.Lock()
+	c.synced = true
+	c.mu.Unlock()
 	return nil
 }
 
@@ -401,6 +405,7 @@ func (c *Core) handle(ev Event) {
 		}
 		e.c = ev.Container
 		needSock := e.sock == nil && ev.Container.Volume != "" && !c.Passive
+		synced := c.synced
 		c.mu.Unlock()
 		// opening a volume socket is a dozen filesystem calls plus a
 		// listen, and this lock answers Containers, Send and State for
@@ -418,6 +423,8 @@ func (c *Core) handle(ev Event) {
 		}
 		if !known {
 			c.log.Info("container up", "container", ev.Container.Name, "ports", ev.Container.Ports)
+		}
+		if !known && synced {
 			c.Notify(NoticeServerStart, ev.Container.Name, map[string]any{"image": ev.Container.Image, "ports": ev.Container.Ports})
 		}
 		c.emit(Event{Kind: Start, Container: e.c})
