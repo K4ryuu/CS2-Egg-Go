@@ -2,6 +2,13 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.0.4] - 2026-10-14
+
+### Fixed
+
+- `cs2node` wrote about 100 MB to disk every minute, a constant 1.6 MB/s. After each CS2 update check, vpksync copied both `steamclient.so` files into the central install and ran a chmod over every file in it, even when nothing had changed. Both now leave files that are already right alone.
+- A daemon restart or self-update posted "Server up" for every server that was already running. Only a server that actually starts while the daemon runs gets one now.
+
 ## [1.0.3] - 2026-10-13
 
 ### Fixed
