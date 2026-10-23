@@ -87,6 +87,55 @@ func TestSymlinkPushVerifyAndPrune(t *testing.T) {
 	}
 }
 
+func TestVerifyDetectsStaleOrdinaryFileWithValidVPKLinks(t *testing.T) {
+	src := central(t)
+	dst := t.TempDir()
+	write(t, filepath.Join(dst, "game/csgo/gameinfo.gi"), "server-gameinfo")
+	write(t, filepath.Join(dst, "game/csgo/cfg/server.cfg"), "server-cfg")
+
+	if _, err := vpksync.Push(src, dst, vpksync.Symlink, core.Owner{}); err != nil {
+		t.Fatal(err)
+	}
+	if !vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("freshly pushed volume must verify")
+	}
+
+	// Simulate a central game update that changes an ordinary file without
+	// changing its size. The existing VPK links remain valid, but the old
+	// engine binary must make Verify fail.
+	centralBinary := filepath.Join(src, "game/bin/linuxsteamrt64/cs2")
+	volumeBinary := filepath.Join(dst, "game/bin/linuxsteamrt64/cs2")
+	if err := os.WriteFile(centralBinary, []byte("BINARY"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	updated := time.Now().Add(2 * time.Minute)
+	if err := os.Chtimes(centralBinary, updated, updated); err != nil {
+		t.Fatal(err)
+	}
+
+	vpk := filepath.Join(dst, "game/csgo/pak01_000.vpk")
+	if link, err := os.Readlink(vpk); err != nil || link != vpksync.MountDst+"/game/csgo/pak01_000.vpk" {
+		t.Fatalf("VPK link unexpectedly changed: link=%q err=%v", link, err)
+	}
+	if vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("valid VPK links must not hide a stale ordinary game file")
+	}
+
+	rep, err := vpksync.Push(src, dst, vpksync.Symlink, core.Owner{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Copied != 1 || rep.Linked != 0 {
+		t.Fatalf("update should copy only the changed binary and keep valid VPK links: %+v", rep)
+	}
+	if read(volumeBinary) != "BINARY" {
+		t.Fatal("updated engine binary was not pushed")
+	}
+	if !vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("volume must verify after the stale binary was pushed")
+	}
+}
+
 func TestCopyAndHardlinkModes(t *testing.T) {
 	src := central(t)
 	dst := t.TempDir()
