@@ -163,3 +163,45 @@ func TestCopyAndHardlinkModes(t *testing.T) {
 		t.Fatal("hardlinks in place must not be redone")
 	}
 }
+
+func TestVerifyDetectsMissingOrdinaryFileWithValidVPKLinks(t *testing.T) {
+	src := central(t)
+	dst := t.TempDir()
+	write(t, filepath.Join(dst, "game/csgo/gameinfo.gi"), "server-gameinfo")
+	write(t, filepath.Join(dst, "game/csgo/cfg/server.cfg"), "server-cfg")
+
+	if _, err := vpksync.Push(src, dst, vpksync.Symlink, core.Owner{}); err != nil {
+		t.Fatal(err)
+	}
+	if !vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("freshly pushed volume must verify")
+	}
+
+	volumeBinary := filepath.Join(dst, "game/bin/linuxsteamrt64/cs2")
+	if err := os.Remove(volumeBinary); err != nil {
+		t.Fatal(err)
+	}
+
+	vpk := filepath.Join(dst, "game/csgo/pak01_000.vpk")
+	if link, err := os.Readlink(vpk); err != nil || link != vpksync.MountDst+"/game/csgo/pak01_000.vpk" {
+		t.Fatalf("VPK link unexpectedly changed: link=%q err=%v", link, err)
+	}
+	if vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("valid VPK links must not hide a missing ordinary game file")
+	}
+
+	rep, err := vpksync.Push(src, dst, vpksync.Symlink, core.Owner{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Copied != 1 || rep.Linked != 0 {
+		t.Fatalf("push should restore only the missing binary and keep valid VPK links: %+v", rep)
+	}
+	if read(volumeBinary) != "binary" {
+		t.Fatal("missing engine binary was not restored")
+	}
+	if !vpksync.Verify(src, dst, vpksync.Symlink) {
+		t.Fatal("volume must verify after the missing binary was restored")
+	}
+}
+
