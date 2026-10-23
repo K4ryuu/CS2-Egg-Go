@@ -107,23 +107,12 @@ func Push(src, dst string, method Method, owner core.Owner) (Report, error) {
 	})
 	note(err)
 	// files the server owns: only when absent, never overwritten
-	if _, err := root.Stat("game/csgo/gameinfo.gi"); err != nil {
-		if _, err := copyIfChanged(root, filepath.Join(src, "game/csgo/gameinfo.gi"), "game/csgo/gameinfo.gi"); err == nil {
-			rep.Copied++
-			touched = append(touched, "game/csgo/gameinfo.gi")
-		}
-	}
-	if entries, err := os.ReadDir(filepath.Join(src, "game/csgo/cfg")); err == nil {
-		for _, e := range entries {
-			name := e.Name()
-			if e.IsDir() || (!strings.HasSuffix(name, ".cfg") && !strings.HasSuffix(name, ".vcfg")) {
-				continue
-			}
-			if _, err := root.Stat("game/csgo/cfg/" + name); err != nil {
-				if _, err := copyIfChanged(root, filepath.Join(src, "game/csgo/cfg", name), "game/csgo/cfg/"+name); err == nil {
-					rep.Copied++
-					touched = append(touched, "game/csgo/cfg/"+name)
-				}
+	owned, _ := serverOwnedFiles(src)
+	for _, rel := range owned {
+		if _, err := root.Stat(rel); err != nil {
+			if _, err := copyIfChanged(root, filepath.Join(src, rel), rel); err == nil {
+				rep.Copied++
+				touched = append(touched, rel)
 			}
 		}
 	}
@@ -319,29 +308,37 @@ func currentMirror(src string, root *os.Root, rel string) bool {
 	return err == nil && di.Mode().IsRegular() && di.Size() == si.Size() && di.ModTime().Equal(si.ModTime())
 }
 
+// serverOwnedFiles lists the central gameinfo.gi and cfg files, which land in
+// a volume only when absent.
+func serverOwnedFiles(src string) ([]string, error) {
+	var rels []string
+	if _, err := os.Stat(filepath.Join(src, "game/csgo/gameinfo.gi")); err == nil {
+		rels = append(rels, "game/csgo/gameinfo.gi")
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(src, "game/csgo/cfg"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if !e.IsDir() && (strings.HasSuffix(name, ".cfg") || strings.HasSuffix(name, ".vcfg")) {
+			rels = append(rels, "game/csgo/cfg/"+name)
+		}
+	}
+	return rels, nil
+}
+
 // verifyServerOwnedFiles checks only presence: Push copies these files if
 // absent but leaves existing server-owned configuration untouched.
 func verifyServerOwnedFiles(src string, root *os.Root) bool {
-	gameInfo := filepath.Join(src, "game/csgo/gameinfo.gi")
-	if _, err := os.Stat(gameInfo); err == nil {
-		if _, err := root.Stat("game/csgo/gameinfo.gi"); err != nil {
-			return false
-		}
-	} else if !errors.Is(err, fs.ErrNotExist) {
+	owned, err := serverOwnedFiles(src)
+	if err != nil {
 		return false
 	}
-
-	cfgDir := filepath.Join(src, "game/csgo/cfg")
-	entries, err := os.ReadDir(cfgDir)
-	if err != nil {
-		return errors.Is(err, fs.ErrNotExist)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || (!strings.HasSuffix(name, ".cfg") && !strings.HasSuffix(name, ".vcfg")) {
-			continue
-		}
-		if _, err := root.Stat(filepath.Join("game/csgo/cfg", name)); err != nil {
+	for _, rel := range owned {
+		if _, err := root.Stat(rel); err != nil {
 			return false
 		}
 	}

@@ -204,4 +204,3 @@ func TestVerifyDetectsMissingOrdinaryFileWithValidVPKLinks(t *testing.T) {
 		t.Fatal("volume must verify after the missing binary was restored")
 	}
 }
-
