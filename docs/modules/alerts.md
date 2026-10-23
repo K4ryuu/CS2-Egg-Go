@@ -22,6 +22,9 @@ Pick the ones you want; `all` is the default.
 | `node.update` | cs2node updated itself |
 | `backup.done`, `backup.failed` | A backup finished or failed |
 | `cleanup.done` | A cleanup pass removed files from a volume: how many and how much |
+| `maintenance.done` | A [maintenance](maintenance.md) pass freed host disk: how much |
+| `disk.low` | Free disk on `/` dropped below the maintenance threshold |
+| `reboot.required` | An upgrade is waiting for a reboot |
 | `server.start`, `server.stop` | A container came up or went away. The stop says why: stopped cleanly, restarting for a CS2 update, killed, or it exited on a crash, with the exit code and the signal behind it. Noisy on a busy node |
 
 ## What a message looks like

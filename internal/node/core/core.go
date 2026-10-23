@@ -103,6 +103,9 @@ const (
 	NoticeBackupDone      = "backup.done"      // path, bytes
 	NoticeBackupFailed    = "backup.failed"    // err
 	NoticeCleanupDone     = "cleanup.done"     // files, bytes
+	NoticeMaintenanceDone = "maintenance.done" // bytes
+	NoticeDiskLow         = "disk.low"         // free_percent
+	NoticeRebootRequired  = "reboot.required"
 )
 
 // NoticeKinds lists every kind with its one-line meaning, in display order.
@@ -116,6 +119,9 @@ var NoticeKinds = []struct{ Kind, Desc string }{
 	{NoticeBackupDone, "a backup finished"},
 	{NoticeBackupFailed, "a backup failed"},
 	{NoticeCleanupDone, "a cleanup pass removed files from a volume"},
+	{NoticeMaintenanceDone, "a maintenance pass freed host disk (images, build cache, journal)"},
+	{NoticeDiskLow, "free disk on / dropped below the maintenance threshold"},
+	{NoticeRebootRequired, "an upgrade is waiting for a reboot"},
 	{NoticeServerStart, "a server container came up"},
 	{NoticeServerStop, "a server container went away"},
 }

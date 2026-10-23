@@ -131,6 +131,18 @@ func Render(n core.Notice, node string) Embed {
 		e.Title, e.Color = "Cleanup done", blue
 		e.add("Freed", size(n.Fields["bytes"]))
 		e.add("Files", orDash(f("files")))
+	case core.NoticeMaintenanceDone:
+		e.Title, e.Color = "Maintenance done", blue
+		e.add("Freed", size(n.Fields["bytes"]))
+	case core.NoticeDiskLow:
+		e.Title, e.Color = "Disk almost full", orange
+		if p := count(n.Fields["free_percent"]); p > 0 {
+			e.add("Free", strconv.Itoa(p)+"%")
+		}
+		e.Description = "Free space on / is under the maintenance threshold."
+	case core.NoticeRebootRequired:
+		e.Title, e.Color = "Reboot required", yellow
+		e.Description = "An upgrade is waiting for a reboot. Pick a quiet moment, the node never reboots by itself."
 	case core.NoticeServerStart:
 		e.Title, e.Color = "Server up", green
 		e.add("Ports", ports(n.Fields["ports"]))

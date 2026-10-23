@@ -23,6 +23,7 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/core"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/crashes"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/guard"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/maintenance"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/metrics"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/nodeconfig"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/ui"
@@ -418,4 +419,46 @@ func runCleanupCommand(log *slog.Logger, args []string) error {
 	go c.Run(ctx)
 	time.Sleep(1500 * time.Millisecond) // one reconcile for the container list
 	return nodecleanup.RunNow(ctx, os.Stdout, cm, c, server)
+}
+
+// runMaintenanceCommand: `setup` needs no module and no daemon; the report
+// reads the state file; `now` runs one pass in this process.
+func runMaintenanceCommand(log *slog.Logger, args []string) error {
+	has := func(flag string) bool {
+		for _, a := range args {
+			if a == flag {
+				return true
+			}
+		}
+		return false
+	}
+	if len(args) > 0 && args[0] == "setup" {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		return maintenance.Setup(ctx, os.Stdout, os.Stdin, maintenance.RunCmd, maintenance.UpgradesFile, has("--yes"))
+	}
+	_, c, mods, err := load(log, true)
+	if err != nil {
+		return err
+	}
+	var mm *maintenance.Module
+	for _, m := range mods {
+		if v, ok := m.(*maintenance.Module); ok {
+			mm = v
+		}
+	}
+	if mm == nil {
+		return errors.New("maintenance module not enabled on this node (cs2node install)")
+	}
+	if err := mm.Configure(c); err != nil {
+		return err
+	}
+	if len(args) == 0 || args[0] != "now" {
+		maintenance.PrintStats(os.Stdout, mm.Cfg(), maintenance.LoadStats(maintenance.StateDir))
+		return nil
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	maintenance.RunNow(ctx, os.Stdout, mm, c, has("--apply"))
+	return nil
 }

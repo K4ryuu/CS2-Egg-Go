@@ -70,6 +70,14 @@ Private and bridge addresses are refused: blocking `172.18.0.1` would block ever
 | `cs2node cleanup [server]` | What the passes removed: per server, per rule, and the total |
 | `cs2node cleanup now [server]` | Run a pass over every running server, or one, right now |
 
+## Maintenance
+
+| Command | Does |
+|---|---|
+| `cs2node maintenance` | Mode, totals per task and the last pass |
+| `cs2node maintenance now [--apply]` | Run a pass now; `--apply` overrides `dry_run` for that pass |
+| `cs2node maintenance setup [--yes]` | Install and configure unattended security upgrades (never auto-reboots) |
+
 ## Live view
 
 | Command | Does |

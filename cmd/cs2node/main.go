@@ -30,6 +30,7 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/doctor"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/guard"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/install"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/maintenance"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/metrics"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/module"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/nodeconfig"
@@ -85,6 +86,10 @@ func usage() {
 	group("Cleanup  (module cleanup):")
 	cmd("cleanup [server]", "what the cleanup passes removed, per server and per rule")
 	cmd("cleanup now [server]", "run a cleanup pass over every running server (or one) right now")
+	group("Maintenance  (module maintenance):")
+	cmd("maintenance", "docker prune, journal trim and disk watch: totals and the last pass")
+	cmd("maintenance now [--apply]", "run a pass right now (--apply overrides dry_run for this pass)")
+	cmd("maintenance setup [--yes]", "install and configure unattended security upgrades (never auto-reboots)")
 	fmt.Fprintf(w, "\n  %s\n\n", ui.Gray(ui.ServerIDs))
 }
 
@@ -95,7 +100,7 @@ func allModules(log *slog.Logger) []module.Module {
 	// in a sensible shape rather than two that drift
 	return []module.Module{
 		vpksync.New(log, client), guard.New(log), alerts.New(log, client), addoncache.New(log, client),
-		workshop.New(log, client), backup.New(log), nodecleanup.New(log), crashes.New(log), consolelog.New(log), metrics.New(log),
+		workshop.New(log, client), backup.New(log), nodecleanup.New(log), maintenance.New(log), crashes.New(log), consolelog.New(log), metrics.New(log),
 	}
 }
 
@@ -165,6 +170,8 @@ func main() {
 		err = runWorkshopCommand(log, os.Args[2:])
 	case "cleanup":
 		err = runCleanupCommand(log, os.Args[2:])
+	case "maintenance":
+		err = runMaintenanceCommand(log, os.Args[2:])
 	case "backups", "backup", "restore":
 		err = runBackupCommand(log, os.Args[1], os.Args[2:])
 	case "top":

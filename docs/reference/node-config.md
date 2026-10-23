@@ -140,6 +140,19 @@
 
 Paths in `directories` are relative to the volume root, and an absolute path is refused unless it names the root itself (`/home/container`, which is how older `cleanup.json` files wrote it).
 
+## maintenance
+
+| Key | Default | Meaning |
+|---|---|---|
+| `every_hours` | `168` | Hours between passes. `0` runs only on demand |
+| `dry_run` | `true` | Report what would go, delete nothing |
+| `images` | `true` | Prune dangling docker images |
+| `build_cache` | `true` | Prune the docker build cache |
+| `build_cache_hours` | `168` | Keep build cache newer than this |
+| `journal` | `true` | Trim old journal files |
+| `journal_days` | `14` | Days of journal to keep (1 to 3650) |
+| `disk_warn_percent` | `15` | Alert under this percent free on `/`. `0` = no watch |
+
 ## Validation
 
 Every module checks its own section when the daemon starts. A bad value is a startup error for that module with the reason in the journal, not a silent fallback, and the other modules keep running.

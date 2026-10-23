@@ -36,6 +36,7 @@ The node daemon is a core plus modules you pick at install. [How they work](modu
 | [backups](modules/backups.md) | A nightly archive outside the volumes |
 | [metrics](modules/metrics.md) | `cs2node top` and Prometheus |
 | [cleanup](modules/cleanup.md) | Demos, logs and dumps deleted on a schedule, fleet-wide |
+| [maintenance](modules/maintenance.md) | Docker prune, journal trim, disk and reboot watch, unattended upgrades |
 | [console-log](modules/console-log.md) | The console tab's output, saved past a restart |
 
 ## Reference

@@ -37,6 +37,7 @@ flowchart TB
 | [backup](backups.md) | Disk for the archives | A nightly copy of what you cannot re-download |
 | [metrics](metrics.md) | A local port | `cs2node top` and Prometheus |
 | [cleanup](cleanup.md) | Nothing | Demos, logs and dumps deleted on a schedule, one rule set for the node, off the server boot path |
+| [maintenance](maintenance.md) | Nothing | Dangling docker images, build cache and old journals pruned, disk and reboot alerts, optional unattended upgrades |
 | [consolelog](console-log.md) | Disk for the log files | Every server's console tab, saved past a restart, gzip-compressed after a day |
 
 Turn one on any time: `sudo cs2node install` walks the list again with your current settings as the defaults.

@@ -10,6 +10,7 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/addoncache"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/cleanup"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/guard"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/maintenance"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/module"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/workshop"
 )
@@ -26,6 +27,7 @@ func TestModuleNotes(t *testing.T) {
 		{"guard", guard.New(nil), []string{"ENABLE_GUARD=1"}},
 		{"addoncache", addoncache.New(nil, nil), []string{"cs2node pin"}},
 		{"cleanup", cleanup.New(nil), []string{"cleanup.json", "modules.cleanup.rules"}},
+		{"maintenance", maintenance.New(nil), []string{"dry run", "cs2node maintenance setup"}},
 	}
 	for _, tc := range cases {
 		noter, ok := tc.mod.(module.Noter)

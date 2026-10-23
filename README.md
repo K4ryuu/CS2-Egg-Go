@@ -73,6 +73,7 @@ Every module is optional and none of them talk to each other, only to the daemon
 | `backup` | A nightly archive of what you cannot re-download, kept off the server's disk | [Backups](docs/modules/backups.md) |
 | `metrics` | `cs2node top` and a Prometheus endpoint | [Metrics](docs/modules/metrics.md) |
 | `cleanup` | Demos, logs and crash dumps deleted on a schedule, one rule set for the node instead of one per server | [Cleanup](docs/modules/cleanup.md) |
+| `maintenance` | The VPS itself: dangling docker images, build cache and old journals pruned, disk and reboot alerts, optional unattended upgrades | [Maintenance](docs/modules/maintenance.md) |
 
 ## How the pieces fit
 
