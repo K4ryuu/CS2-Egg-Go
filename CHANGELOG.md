@@ -2,11 +2,11 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
-## Unreleased
+## [1.0.5] - 2026-10-23
 
 ### Fixed
 
-- VPK sync verification now checks mirrored non-VPK files as well as VPK links, so a stopped server that missed a central CS2 update is pushed before booting even when its existing VPK links remain valid.
+- A server that was stopped during a central CS2 update could boot on the old engine and libraries. The game file check only looked at VPK links, which stay valid across an update, so the push was skipped. It now checks every mirrored file (thanks @larnzs, [#4](https://github.com/K4ryuu/CS2-Egg-Go/pull/4)).
 
 ## [1.0.4] - 2026-10-14
 
