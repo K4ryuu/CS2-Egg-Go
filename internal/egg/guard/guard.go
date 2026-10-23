@@ -322,9 +322,13 @@ func (g *Guard) inspect(line string) bool {
 	return true
 }
 
+// trusted is true for a client that reached full signon, or whose address did
+// earlier. The address half matters on a map change or a crash: the engine
+// re-runs Connect for every player (a fresh, untrusted client) and forces them
+// to reconnect, so a legit player mid-reload looks exactly like a stuck bot.
 func (g *Guard) trusted(uid int) bool {
 	c := g.clients[uid]
-	return c != nil && c.trusted
+	return c != nil && (c.trusted || g.ipTrusted[c.ip])
 }
 
 func (g *Guard) ipOf(uid int) string {

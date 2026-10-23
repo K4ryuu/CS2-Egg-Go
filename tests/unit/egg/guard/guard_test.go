@@ -146,6 +146,22 @@ func TestReconnectStuckKicksAndReportsUID(t *testing.T) {
 	}
 }
 
+func TestReconnectAfterMapChangeKeepsTrustedIP(t *testing.T) {
+	h := newHarness(t, nil)
+	h.feed(
+		"CServerSideClientBase::Connect( name='legit', userid=4, fake=0, connectiontypeflags=4, chan->addr=178.149.64.167:27005 )",
+		"Client 4 'legit' signon state SIGNONSTATE_SPAWN -> SIGNONSTATE_FULL",
+		// crash or map change: engine reconnects the player, fresh untrusted client, no drop line
+		"CServerSideClientBase::Connect( name='legit', userid=9, fake=0, connectiontypeflags=4, chan->addr=178.149.64.167:27005 )",
+	)
+	for i := 0; i < 3; i++ {
+		h.feed("SV:  Forcing client reconnect (SIGNONSTATE_CONNECTED) for client 'legit'")
+	}
+	if h.tripped("reconnect_stuck") || h.punitive() || h.hit("reconnect_stuck") != nil {
+		t.Fatalf("legit player blocked: %s %v", h.out.String(), h.cmds)
+	}
+}
+
 func TestMoveNotJoinedBlocksAdName(t *testing.T) {
 	h := newHarness(t, nil)
 	name := "★★★ STEAMLVLS.COM ★★ CHEAP STEAM LEVELS"
