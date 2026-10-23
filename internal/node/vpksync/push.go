@@ -223,46 +223,129 @@ func copyIfChanged(root *os.Root, src, rel string) (bool, error) {
 	return true, root.Rename(tmp, rel)
 }
 
-// Verify reports whether every central VPK is current in dst.
+// Verify reports whether every mirrored central file is current in dst.
+// Server-owned files (gameinfo.gi and cfg files) are checked for presence
+// only, because Push deliberately does not overwrite them once they exist.
 func Verify(src, dst string, method Method) bool {
 	root, err := os.OpenRoot(dst)
 	if err != nil {
 		return false
 	}
 	defer root.Close()
+
 	ok := true
-	filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || !ok {
+	walkErr := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			ok = false
 			return nil
 		}
-		rel, _ := filepath.Rel(src, path)
-		if skipped(rel) && d.IsDir() {
-			return filepath.SkipDir
-		}
-		if d.IsDir() || !strings.HasSuffix(rel, ".vpk") {
+		if !ok {
 			return nil
 		}
-		switch method {
-		case Symlink:
-			cur, err := root.Readlink(rel)
-			ok = err == nil && cur == filepath.Join(MountDst, rel)
-		case Hardlink:
-			same := false
-			if dir, err := root.Open(filepath.Dir(rel)); err == nil {
-				same = sameDevice(path, dir)
-				dir.Close()
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			ok = false
+			return nil
+		}
+		if rel == "." {
+			return nil
+		}
+		if skipped(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
 			}
-			if same {
-				ok = sameInode(path, root, rel)
-			} else {
+			return nil
+		}
+		if d.IsDir() {
+			dstInfo, err := root.Stat(rel)
+			ok = err == nil && dstInfo.IsDir()
+			return nil
+		}
+
+		// Push preserves symlinks as symlinks, so Verify must compare their
+		// targets before considering the VPK or ordinary-file cases.
+		if d.Type()&fs.ModeSymlink != 0 {
+			want, err := os.Readlink(path)
+			if err != nil {
+				ok = false
+				return nil
+			}
+			got, err := root.Readlink(rel)
+			ok = err == nil && got == want
+			return nil
+		}
+
+		if strings.HasSuffix(rel, ".vpk") {
+			switch method {
+			case Symlink:
+				cur, err := root.Readlink(rel)
+				ok = err == nil && cur == filepath.Join(MountDst, rel)
+			case Hardlink:
+				same := false
+				if dir, err := root.Open(filepath.Dir(rel)); err == nil {
+					same = sameDevice(path, dir)
+					dir.Close()
+				}
+				if same {
+					ok = sameInode(path, root, rel)
+				} else {
+					ok = currentCopy(path, root, rel)
+				}
+			default:
 				ok = currentCopy(path, root, rel)
 			}
-		default:
-			ok = currentCopy(path, root, rel)
+			return nil
 		}
+
+		// A valid VPK link does not prove that the engine, libraries, or
+		// other ordinary game files are current after a central update.
+		ok = currentMirror(path, root, rel)
 		return nil
 	})
-	return ok
+	if walkErr != nil || !ok {
+		return false
+	}
+	return verifyServerOwnedFiles(src, root)
+}
+
+// currentMirror uses the same size+mtime equality as copyIfChanged, so
+// changes to non-VPK files trigger Push before an old server can boot.
+func currentMirror(src string, root *os.Root, rel string) bool {
+	si, err := os.Stat(src)
+	if err != nil || !si.Mode().IsRegular() {
+		return false
+	}
+	di, err := root.Stat(rel)
+	return err == nil && di.Mode().IsRegular() && di.Size() == si.Size() && di.ModTime().Equal(si.ModTime())
+}
+
+// verifyServerOwnedFiles checks only presence: Push copies these files if
+// absent but leaves existing server-owned configuration untouched.
+func verifyServerOwnedFiles(src string, root *os.Root) bool {
+	gameInfo := filepath.Join(src, "game/csgo/gameinfo.gi")
+	if _, err := os.Stat(gameInfo); err == nil {
+		if _, err := root.Stat("game/csgo/gameinfo.gi"); err != nil {
+			return false
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return false
+	}
+
+	cfgDir := filepath.Join(src, "game/csgo/cfg")
+	entries, err := os.ReadDir(cfgDir)
+	if err != nil {
+		return errors.Is(err, fs.ErrNotExist)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || (!strings.HasSuffix(name, ".cfg") && !strings.HasSuffix(name, ".vcfg")) {
+			continue
+		}
+		if _, err := root.Stat(filepath.Join("game/csgo/cfg", name)); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // currentCopy: same size and the copy is not older than its source.
