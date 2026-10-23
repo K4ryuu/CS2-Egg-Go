@@ -2,6 +2,16 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.1.0] - 2026-10-23
+
+### Added
+
+- **maintenance** module: keeps the VPS under the servers tidy. It prunes dangling docker images that no container uses (never tagged images, never `prune -a`), prunes build cache older than a week and trims the journal to 14 days. It watches free disk and a pending reboot and tells you through alerts (`disk.low`, `reboot.required`, `maintenance.done`). It starts as a dry run, so the first passes only report what they would remove. `cs2node maintenance` shows the totals, `maintenance now [--apply]` runs a pass, and `maintenance setup` offers unattended security upgrades without automatic reboot. A setup you already have is left alone. See [Maintenance](docs/modules/maintenance.md).
+
+### Fixed
+
+- The guard blocked a legit player for 6 hours with `reconnect_stuck` after a crash or a few quick map changes. The engine reconnects every player on a map change, which looked exactly like a stuck bot. An address that already reached full signon is now trusted for every rule, including `reconnect_stuck`.
+
 ## [1.0.5] - 2026-10-23
 
 ### Fixed
