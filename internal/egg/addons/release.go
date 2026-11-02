@@ -52,6 +52,12 @@ var Pinnable = map[string]string{
 	"modsharp": RepoModSharp,
 }
 
+// releaseLines limits a repo to one release line: metamod-source publishes
+// 1.12 (Source 1) alongside 2.0, the only one CS2 loads
+var releaseLines = map[string]string{
+	RepoMetamod: "2."
+}
+
 // KeyForRepo is the pin name of a repo, empty when it cannot be pinned.
 func KeyForRepo(repo string) string {
 	for key, r := range Pinnable {
@@ -90,8 +96,21 @@ func get(ctx context.Context, client *http.Client, url, repo string) ([]byte, er
 }
 
 // FetchRelease returns the latest stable release, or with prerelease the
-// newest release of any kind (first element of /releases).
+// newest release of any kind (first element of /releases). Repos in
+// releaseLines stay on their line
 func FetchRelease(ctx context.Context, client *http.Client, repo string, prerelease bool) (*Release, error) {
+	if line := releaseLines[repo]; line != "" {
+		list, err := FetchReleases(ctx, client, repo)
+		if err != nil {
+			return nil, err
+		}
+		for i := range list {
+			if strings.HasPrefix(list[i].Tag, line) && (prerelease || !list[i].Prerelease) {
+				return &list[i], nil
+			}
+		}
+		return nil, fmt.Errorf("no %s* release of %s", line, repo)
+	}
 	if prerelease {
 		list, err := FetchReleases(ctx, client, repo)
 		if err != nil {
