@@ -58,6 +58,11 @@ var releaseLines = map[string]string{
 	RepoMetamod: "2.",
 }
 
+// OnLine reports whether tag is on the repo's release line.
+func OnLine(repo, tag string) bool {
+	return strings.HasPrefix(tag, releaseLines[repo])
+}
+
 // KeyForRepo is the pin name of a repo, empty when it cannot be pinned.
 func KeyForRepo(repo string) string {
 	for key, r := range Pinnable {
@@ -96,22 +101,10 @@ func get(ctx context.Context, client *http.Client, url, repo string) ([]byte, er
 }
 
 // FetchRelease returns the latest stable release, or with prerelease the
-// newest release of any kind (first element of /releases). Repos in
-// releaseLines stay on their line
+// newest release of any kind (first element of /releases). Line repos always
+// take the newest: their CS2 builds are all prereleases.
 func FetchRelease(ctx context.Context, client *http.Client, repo string, prerelease bool) (*Release, error) {
-	if line := releaseLines[repo]; line != "" {
-		list, err := FetchReleases(ctx, client, repo)
-		if err != nil {
-			return nil, err
-		}
-		for i := range list {
-			if strings.HasPrefix(list[i].Tag, line) && (prerelease || !list[i].Prerelease) {
-				return &list[i], nil
-			}
-		}
-		return nil, fmt.Errorf("no %s* release of %s", line, repo)
-	}
-	if prerelease {
+	if prerelease || releaseLines[repo] != "" {
 		list, err := FetchReleases(ctx, client, repo)
 		if err != nil {
 			return nil, err
@@ -129,18 +122,24 @@ func FetchRelease(ctx context.Context, client *http.Client, repo string, prerele
 	return &rel, nil
 }
 
-// FetchReleases lists a repo's releases, newest first.
+// FetchReleases lists a repo's releases on its release line, newest first.
 func FetchReleases(ctx context.Context, client *http.Client, repo string) ([]Release, error) {
-	body, err := get(ctx, client, APIBase+"/repos/"+repo+"/releases", repo)
+	body, err := get(ctx, client, APIBase+"/repos/"+repo+"/releases?per_page=100", repo)
 	if err != nil {
 		return nil, err
 	}
-	var list []Release
-	if err := json.Unmarshal(body, &list); err != nil {
+	var all []Release
+	if err := json.Unmarshal(body, &all); err != nil {
 		return nil, fmt.Errorf("parse releases: %w", err)
 	}
+	list := all[:0]
+	for _, r := range all {
+		if OnLine(repo, r.Tag) {
+			list = append(list, r)
+		}
+	}
 	if len(list) == 0 {
-		return nil, errors.New("no releases")
+		return nil, fmt.Errorf("no %q releases of %s", releaseLines[repo], repo)
 	}
 	return list, nil
 }

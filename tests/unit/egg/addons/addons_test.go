@@ -72,7 +72,7 @@ func TestFetchReleaseKeepsMetamodOnTheCS2Line(t *testing.T) {
 	body := `[` +
 		`{"tag_name":"1.12.0.1229","prerelease":false,"assets":[{"name":"mmsource-1.12.0-git1229-linux.tar.gz","browser_download_url":"http://dl/mm112.tgz"}]},` +
 		`{"tag_name":"2.0.0.1483","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1483-linux.tar.gz","browser_download_url":"http://dl/mm2.tgz"}]}` +
-	`]`
+		`]`
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repos/"+addons.RepoMetamod+"/releases" {
@@ -92,6 +92,11 @@ func TestFetchReleaseKeepsMetamodOnTheCS2Line(t *testing.T) {
 	a, _ := rel.Asset(regexp.MustCompile(`linux\.tar\.gz$`))
 	if regexp.MustCompile(`git[0-9]+`).FindString(a.Name) != "git1483" {
 		t.Fatalf("metamod version from asset name: %s", a.Name)
+	}
+
+	// 2.0 builds are all prereleases, stable must not fall back to 1.12
+	if rel, err := addons.FetchRelease(ctx, srv.Client(), addons.RepoMetamod, false); err != nil || rel.Tag != "2.0.0.1483" {
+		t.Fatalf("stable ask must still pick the 2.0 line, got %v %+v", err, rel)
 	}
 
 	// Only 1.12 on the page - an error, never the Source 1 build
