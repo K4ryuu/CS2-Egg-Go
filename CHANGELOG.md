@@ -2,6 +2,12 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.1.1] - 2026-11-03
+
+### Fixed
+
+- New servers got a Metamod without `bin/linuxsteamrt64`, so CS2 ran without it and CounterStrikeSharp never loaded. metamod-source 1.12.0.1229 (Source 1 games) was published after 2.0.0.1483 and became the first entry of the release list. Metamod is now picked from the 2.x line only, in the egg updater, the node addon cache and version pins. A pin to a 1.12 build is refused (thanks @AmperCZ1, [#6](https://github.com/K4ryuu/CS2-Egg-Go/pull/6)).
+
 ## [1.1.0] - 2026-10-23
 
 ### Added
