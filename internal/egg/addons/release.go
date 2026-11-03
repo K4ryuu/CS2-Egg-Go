@@ -55,7 +55,7 @@ var Pinnable = map[string]string{
 // releaseLines limits a repo to one release line: metamod-source publishes
 // 1.12 (Source 1) alongside 2.0, the only one CS2 loads
 var releaseLines = map[string]string{
-	RepoMetamod: "2."
+	RepoMetamod: "2.",
 }
 
 // KeyForRepo is the pin name of a repo, empty when it cannot be pinned.
