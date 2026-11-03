@@ -25,10 +25,13 @@ func github(t *testing.T) *httptest.Server {
 		switch {
 		case r.URL.Path == "/repos/"+addons.RepoCSS+"/releases/tags/v1.0.360":
 			w.Write([]byte(`{"tag_name":"v1.0.360","assets":[{"name":"css-with-runtime-linux-1.0.360.zip","browser_download_url":"https://github.com/x/css.zip"}]}`))
+		case r.URL.Path == "/repos/"+addons.RepoMetamod+"/releases/tags/1.12.0.1229":
+			w.Write([]byte(`{"tag_name":"1.12.0.1229","assets":[{"name":"mmsource-1.12.0-git1229-linux.tar.gz","browser_download_url":"https://github.com/x/mm1229.tar.gz"}]}`))
 		case strings.HasSuffix(r.URL.Path, "/releases/latest"):
 			w.Write([]byte(`{"tag_name":"v1.0.999","assets":[]}`))
 		case strings.HasSuffix(r.URL.Path, "/releases"):
 			w.Write([]byte(`[
+				{"tag_name":"1.12.0.1229","assets":[{"name":"mmsource-1.12.0-git1229-linux.tar.gz","browser_download_url":"https://github.com/x/mm1229.tar.gz"}]},
 				{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1467-linux.tar.gz","browser_download_url":"https://github.com/x/mm1467.tar.gz"}]},
 				{"tag_name":"2.0.0","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1450-linux.tar.gz","browser_download_url":"https://github.com/x/mm1450.tar.gz"}]}
 			]`))
@@ -83,6 +86,15 @@ func TestPinResolvesByTagAndByAssetName(t *testing.T) {
 	}
 	if _, err := c.ReleaseByVersion(context.Background(), addons.RepoMetamod, "git9999"); err == nil {
 		t.Fatal("a version nobody published must fail, not silently pick the newest")
+	}
+}
+
+func TestPinRefusesMetamodSource1Line(t *testing.T) {
+	c := addoncache.Open(t.TempDir(), github(t).Client(), 0)
+	for _, want := range []string{"git1229", "1.12.0.1229"} {
+		if rel, err := c.ReleaseByVersion(context.Background(), addons.RepoMetamod, want); err == nil {
+			t.Fatalf("%s is Source 1, got %+v", want, rel)
+		}
 	}
 }
 

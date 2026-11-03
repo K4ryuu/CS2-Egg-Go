@@ -67,6 +67,45 @@ func TestFetchReleaseStableAndPrereleaseShapes(t *testing.T) {
 	}
 }
 
+func TestFetchReleaseKeepsMetamodOnTheCS2Line(t *testing.T) {
+	// metamod-source 1.12.0.1229 (Source 1 games) came out after 2.0.0.1483 and is the first element of /releases but CS2 only loads 2.0
+	body := `[` +
+		`{"tag_name":"1.12.0.1229","prerelease":false,"assets":[{"name":"mmsource-1.12.0-git1229-linux.tar.gz","browser_download_url":"http://dl/mm112.tgz"}]},` +
+		`{"tag_name":"2.0.0.1483","prerelease":true,"assets":[{"name":"mmsource-2.0.0-git1483-linux.tar.gz","browser_download_url":"http://dl/mm2.tgz"}]}` +
+		`]`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/"+addons.RepoMetamod+"/releases" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	addons.APIBase = srv.URL
+	ctx := context.Background()
+
+	rel, err := addons.FetchRelease(ctx, srv.Client(), addons.RepoMetamod, true)
+	if err != nil || rel.Tag != "2.0.0.1483" {
+		t.Fatalf("want the 2.0 release, got %v %+v", err, rel)
+	}
+	a, _ := rel.Asset(regexp.MustCompile(`linux\.tar\.gz$`))
+	if regexp.MustCompile(`git[0-9]+`).FindString(a.Name) != "git1483" {
+		t.Fatalf("metamod version from asset name: %s", a.Name)
+	}
+
+	// 2.0 builds are all prereleases, stable must not fall back to 1.12
+	if rel, err := addons.FetchRelease(ctx, srv.Client(), addons.RepoMetamod, false); err != nil || rel.Tag != "2.0.0.1483" {
+		t.Fatalf("stable ask must still pick the 2.0 line, got %v %+v", err, rel)
+	}
+
+	// Only 1.12 on the page - an error, never the Source 1 build
+	body = `[{"tag_name":"1.12.0.1229","prerelease":false,"assets":[{"name":"mmsource-1.12.0-git1229-linux.tar.gz","browser_download_url":"http://dl/mm112.tgz"}]}]`
+	if rel, err := addons.FetchRelease(ctx, srv.Client(), addons.RepoMetamod, true); err == nil {
+		t.Fatalf("no 2.x release must be an error, got %+v", rel)
+	}
+}
+
 func TestNeedsUpdateVerdicts(t *testing.T) {
 	cases := []struct {
 		cur, latest string

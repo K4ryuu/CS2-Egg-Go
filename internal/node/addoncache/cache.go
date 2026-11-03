@@ -108,6 +108,9 @@ func (c *Cache) ReleaseByVersion(ctx context.Context, repo, want string) (*addon
 			return nil, fmt.Errorf("no release of %s carries version %q", repo, want)
 		}
 	}
+	if !addons.OnLine(repo, rel.Tag) {
+		return nil, fmt.Errorf("%s %s is not on the release line CS2 loads", repo, rel.Tag)
+	}
 	os.MkdirAll(filepath.Dir(path), 0o755)
 	if data, err := json.Marshal(cachedRelease{Fetched: c.Now(), Release: rel}); err == nil {
 		os.WriteFile(path, data, 0o644)
