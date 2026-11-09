@@ -6,7 +6,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 
 ### Fixed
 
-- Round backups (`backup_round*.txt`) landed in `game/csgo/backups/`, so MatchZy and other plugins that read them from `game/csgo/` could not restore a round. The `csgo/backups` search path was a workaround for an old MetaMod build that caught these files in its own addon directory, current MetaMod 2.x no longer does. The egg no longer adds the path. Existing servers keep the line in `game/csgo/gameinfo.gi` until a CS2 update replaces the file. Delete the `Game csgo/backups` line by hand to get the backups in `game/csgo/` right away, or keep it if you want them separate (thanks strasin).
+- Round backups (`backup_round*.txt`) landed in `game/csgo/backups/`, so MatchZy and other plugins that read them from `game/csgo/` could not restore a round. The `csgo/backups` search path was a workaround for an old MetaMod build that caught these files in its own addon directory, current MetaMod 2.x no longer does. The egg no longer adds the path. Existing servers keep the line in `game/csgo/gameinfo.gi`. Delete the `Game csgo/backups` line by hand to get the backups in `game/csgo/`, or keep it if you want them separate (thanks strasin).
 
 ## [1.1.1] - 2026-11-03
 
