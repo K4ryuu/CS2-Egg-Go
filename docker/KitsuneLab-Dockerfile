@@ -9,7 +9,7 @@
 # target"). Re-exporting the rootfs through BuildKit rewrites those links relative, so the
 # base is flattened into one layer of our own before anything is stacked on top. The upstream
 # config carries only the default PATH and cosmetic labels, nothing to carry over.
-FROM        --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+FROM        --platform=$BUILDPLATFORM golang:1.27.4-alpine AS build
 ARG         VERSION=0.0.0-dev
 ARG         CHANNEL=dev
 ARG         COMMIT=none
