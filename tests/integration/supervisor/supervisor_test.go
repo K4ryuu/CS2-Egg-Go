@@ -20,6 +20,7 @@ func TestInputReachesTheProcessAndEchoesOnce(t *testing.T) {
 	r, w, _ := os.Pipe()
 	var mu sync.Mutex
 	var lines []string
+	ready := make(chan struct{}, 1)
 	s := &supervisor.Server{
 		Cmd:   exec.Command("sh", "-c", "echo ready; read x; echo got:$x"),
 		Stdin: r,
@@ -27,21 +28,15 @@ func TestInputReachesTheProcessAndEchoesOnce(t *testing.T) {
 			mu.Lock()
 			lines = append(lines, l)
 			mu.Unlock()
+			if l == "ready" {
+				ready <- struct{}{}
+			}
 		},
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- s.Run(context.Background()) }()
 	// type only once the program said ready, so the echo lands after it
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		mu.Lock()
-		ready := len(lines) > 0 && lines[0] == "ready"
-		mu.Unlock()
-		if ready || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitReady(t, ready)
 	w.Write([]byte("ping\n"))
 	select {
 	case err := <-errc:
@@ -82,20 +77,24 @@ func TestTypedQuitMarksTheRunAsStopping(t *testing.T) {
 func TestSendInjectsACommandAndCancelStopsTheServer(t *testing.T) {
 	var mu sync.Mutex
 	var lines []string
+	ready := make(chan struct{}, 1)
 	s := &supervisor.Server{
-		Cmd:         exec.Command("sh", "-c", "while read x; do echo cmd:$x; [ \"$x\" = quit ] && exit 0; done"),
+		Cmd:         exec.Command("sh", "-c", "echo ready; while read x; do echo cmd:$x; [ \"$x\" = quit ] && exit 0; done"),
 		StopCommand: "quit",
 		Grace:       2 * time.Second,
 		Line: func(l string) {
 			mu.Lock()
 			lines = append(lines, l)
 			mu.Unlock()
+			if l == "ready" {
+				ready <- struct{}{}
+			}
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() { errc <- s.Run(ctx) }()
-	time.Sleep(300 * time.Millisecond)
+	waitReady(t, ready)
 	if err := s.Send("kickid 7"); err != nil {
 		t.Fatal(err)
 	}
@@ -123,10 +122,15 @@ func TestOnInputSeesTypedCommandsOnly(t *testing.T) {
 	r, w, _ := os.Pipe()
 	var mu sync.Mutex
 	var typed []string
+	ready := make(chan struct{}, 1)
 	s := &supervisor.Server{
-		Cmd:   exec.Command("sh", "-c", "read a; read b; echo done"),
+		Cmd:   exec.Command("sh", "-c", "echo ready; read a; read b; echo done"),
 		Stdin: r,
-		Line:  func(string) {},
+		Line: func(l string) {
+			if l == "ready" {
+				ready <- struct{}{}
+			}
+		},
 		OnInput: func(cmd string) {
 			mu.Lock()
 			typed = append(typed, cmd)
@@ -135,7 +139,7 @@ func TestOnInputSeesTypedCommandsOnly(t *testing.T) {
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- s.Run(context.Background()) }()
-	time.Sleep(300 * time.Millisecond)
+	waitReady(t, ready)
 	s.Send("kickid 3") // the guard, not a person
 	w.Write([]byte("changelevel de_dust2\n"))
 	select {
@@ -181,15 +185,21 @@ func TestRunEndsWhenTheProcessExitsEvenIfAChildHoldsTheTerminal(t *testing.T) {
 // it has been quiet for Idle; one that keeps talking is left alone.
 func TestSilentServerIsKilledAfterAStop(t *testing.T) {
 	r, w, _ := os.Pipe()
+	ready := make(chan struct{}, 1)
 	s := &supervisor.Server{
-		Cmd:   exec.Command("sh", "-c", "read x; for i in 1 2 3 4 5; do echo busy; sleep 0.2; done; sleep 60"),
+		Cmd:   exec.Command("sh", "-c", "echo ready; read x; for i in 1 2 3 4 5; do echo busy; sleep 0.2; done; sleep 60"),
 		Stdin: r,
-		Line:  func(string) {},
-		Idle:  500 * time.Millisecond,
+		Line: func(l string) {
+			if l == "ready" {
+				ready <- struct{}{}
+			}
+		},
+		Idle: 500 * time.Millisecond,
 	}
 	errc := make(chan error, 1)
 	go func() { errc <- s.Run(context.Background()) }()
-	time.Sleep(300 * time.Millisecond)
+	// a slow exec under load would eat the Idle window before the first "busy"
+	waitReady(t, ready)
 	start := time.Now()
 	w.Write([]byte("quit\n"))
 	select {
@@ -199,6 +209,17 @@ func TestSilentServerIsKilledAfterAStop(t *testing.T) {
 	}
 	if d := time.Since(start); d < time.Second {
 		t.Fatalf("killed after %v, while it was still printing", d)
+	}
+}
+
+// waitReady blocks until the child printed "ready". Exec under load can take
+// seconds, so a fixed sleep before the first write or Send is only a guess.
+func waitReady(t *testing.T, ready <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ready:
+	case <-time.After(30 * time.Second):
+		t.Fatal("shell never started")
 	}
 }
 
