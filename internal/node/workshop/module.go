@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"strconv"
@@ -131,10 +132,10 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 		}
 		go func() {
 			defer m.release(container)
-			m.sync(c, container)
+			m.sync(ctx, c, container)
 		}()
 	})
-	go m.updateLoop(ctx, c)
+	go m.updateLoop(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -158,7 +159,7 @@ func (m *Module) mount(cont core.Container) {
 
 // sync answers the egg's boot request: the server is not running yet, so
 // the volume can be reshaped safely.
-func (m *Module) sync(c *core.Core, container string) {
+func (m *Module) sync(ctx context.Context, c *core.Core, container string) {
 	var cont core.Container
 	for _, x := range c.Containers() {
 		if x.Name == container {
@@ -172,6 +173,10 @@ func (m *Module) sync(c *core.Core, container string) {
 		return
 	}
 	m.mount(cont) // the links are useless without it
+	// ask Steam now: an update since the last check would get linked in its old version
+	fresh, cancel := context.WithTimeout(ctx, 5*time.Second)
+	m.checkUpdates(fresh)
+	cancel()
 	stale := m.staleNow()
 	rep, err := m.store.Sync(cont.Volume, cont.Owner, m.cfg.Seed, stale)
 	if err != nil {
@@ -191,14 +196,16 @@ func (m *Module) sync(c *core.Core, container string) {
 	c.Send(container, reply)
 }
 
-// updateLoop asks Steam which items moved on, so a stale one is handed back
-// to its servers as a real file instead of failing to update against a
-// read-only link.
-func (m *Module) updateLoop(ctx context.Context, c *core.Core) {
+// updateLoop asks Steam which items moved on, so `cs2node status` shows
+// them before a server boots. Each sync asks again for itself.
+func (m *Module) updateLoop(ctx context.Context) {
 	t := time.NewTicker(time.Duration(m.cfg.CheckMinutes) * time.Minute)
 	defer t.Stop()
 	for {
-		m.checkUpdates(ctx, c)
+		m.checkUpdates(ctx)
+		if n := len(m.staleNow()); n > 0 {
+			m.Log.Info("workshop items updated upstream, the first server to boot fetches the new version for everyone", "count", n)
+		}
 		select {
 		case <-ctx.Done():
 			return
@@ -207,33 +214,16 @@ func (m *Module) updateLoop(ctx context.Context, c *core.Core) {
 	}
 }
 
-func (m *Module) checkUpdates(ctx context.Context, c *core.Core) {
-	seen := map[string]bool{}
-	var ids []string
-	for _, it := range m.store.Items() {
-		if !seen[it.ID] {
-			seen[it.ID] = true
-			ids = append(ids, it.ID)
-		}
-	}
-	if len(ids) == 0 {
-		return
-	}
-	details, err := Details(ctx, m.HTTP, ids)
+// checkUpdates refreshes upstream. On error the last answer stays.
+func (m *Module) checkUpdates(ctx context.Context) {
+	latest, err := Latest(ctx, m.HTTP, m.store.IDs())
 	if err != nil {
 		m.Log.Debug("workshop update check failed", "err", err)
 		return
 	}
 	m.mu.Lock()
-	for _, id := range ids {
-		if d, ok := details[id]; ok && !d.Missing && d.Manifest != "" {
-			m.upstream[id] = d.Manifest
-		}
-	}
+	maps.Copy(m.upstream, latest)
 	m.mu.Unlock()
-	if n := len(m.staleNow()); n > 0 {
-		m.Log.Info("workshop items updated upstream, the first server to boot fetches the new version for everyone", "count", n)
-	}
 }
 
 // staleNow lists the items whose newest stored version is behind what
@@ -241,22 +231,9 @@ func (m *Module) checkUpdates(ctx context.Context, c *core.Core) {
 // the update and the node absorbed it.
 func (m *Module) staleNow() map[string]bool {
 	m.mu.Lock()
-	upstream := make(map[string]string, len(m.upstream))
-	for k, v := range m.upstream {
-		upstream[k] = v
-	}
+	upstream := maps.Clone(m.upstream)
 	m.mu.Unlock()
-	stale := map[string]bool{}
-	all := m.store.NewestAll() // one walk, not one per tracked item
-	for id, want := range upstream {
-		newest, have := all[id]
-		// a stored version with no usable id cannot be compared with what
-		// Steam reports, so it is never out of date, it is just old
-		if have && ValidManifest(newest.Manifest) && newest.Manifest != want {
-			stale[id] = true
-		}
-	}
-	return stale
+	return m.store.Stale(upstream)
 }
 
 // status is the workshop section of the control snapshot.

@@ -26,6 +26,21 @@ type Detail struct {
 	Missing  bool // the item is gone or private
 }
 
+// Latest is the current manifest of every listed item Steam still serves.
+func Latest(ctx context.Context, client *http.Client, ids []string) (map[string]string, error) {
+	details, err := Details(ctx, client, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(details))
+	for id, d := range details {
+		if !d.Missing && d.Manifest != "" {
+			out[id] = d.Manifest
+		}
+	}
+	return out, nil
+}
+
 // Details asks Steam about a batch of items.
 func Details(ctx context.Context, client *http.Client, ids []string) (map[string]Detail, error) {
 	if len(ids) == 0 {

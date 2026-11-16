@@ -232,7 +232,7 @@ func runWorkshopCommand(log *slog.Logger, args []string) error {
 		if len(args) > 1 {
 			only = args[1]
 		}
-		return t.Sync(conts, running, only)
+		return t.Sync(ctx, conts, running, only)
 	case args[0] == "prune":
 		return t.Prune(conts)
 	}

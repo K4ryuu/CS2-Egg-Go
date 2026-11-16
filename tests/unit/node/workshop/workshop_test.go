@@ -4,6 +4,7 @@ package workshop_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -206,7 +207,10 @@ func TestSeedOffLeavesOtherServersAlone(t *testing.T) {
 	}
 }
 
-func TestAStaleItemGoesBackAsARealFile(t *testing.T) {
+// An outdated item has to come back as not installed at all. Real files
+// with the old acf entry look installed to MultiAddonManager and
+// AddonsManager, which then never fetch the update (issue #8).
+func TestAStaleItemIsDroppedSoTheServerDownloadsIt(t *testing.T) {
 	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
 	vol := volume(t, realACF)
 	if _, err := store.Sync(vol, me(), true, nil); err != nil {
@@ -216,19 +220,112 @@ func TestAStaleItemGoesBackAsARealFile(t *testing.T) {
 	if _, err := os.Readlink(link); err != nil {
 		t.Fatal("expected a link after the first pass")
 	}
-	// Valve published a new version: the server must be able to write
 	rep, err := store.Sync(vol, me(), true, map[string]bool{"3070290869": true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rep.Released) != 1 {
-		t.Fatalf("stale item not released: %+v", rep)
+	if len(rep.Released) != 1 || len(rep.Linked) != 0 || len(rep.Seeded) != 0 {
+		t.Fatalf("stale item not dropped: %+v", rep)
 	}
-	for _, f := range []string{"3070290869_dir.vpk", "3070290869_000.vpk"} {
-		info, err := os.Lstat(filepath.Join(vol, workshop.VolContent, "3070290869", f))
-		if err != nil || !info.Mode().IsRegular() || info.Size() != 2048 {
-			t.Fatalf("a released item must be real files again: %s %v %+v", f, err, info)
-		}
+	assertNotInstalled(t, vol)
+}
+
+// A server can also hold the outdated version as real files, from an older
+// node that handed it back that way. It goes the same way, not into a link.
+func TestAServerHoldingTheStaleVersionAsFilesIsDropped(t *testing.T) {
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	if _, err := store.Sync(volume(t, realACF), me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	vol := volume(t, realACF)
+	rep, err := store.Sync(vol, me(), true, map[string]bool{"3070290869": true})
+	if err != nil || len(rep.Released) != 1 || len(rep.Linked) != 0 || rep.Freed != 4096 {
+		t.Fatalf("real files of the stale version must go: %+v %v", rep, err)
+	}
+	assertNotInstalled(t, vol)
+}
+
+// assertNotInstalled: no files, no links, no acf entry for the test item.
+func assertNotInstalled(t *testing.T, vol string) {
+	t.Helper()
+	if _, err := os.Lstat(filepath.Join(vol, workshop.VolContent, "3070290869")); !os.IsNotExist(err) {
+		t.Fatalf("the item dir must be gone: %v", err)
+	}
+	app := readVolumeACF(t, vol).Sub("AppWorkshop")
+	if app.Sub("WorkshopItemsInstalled").Sub("3070290869") != nil || app.Sub("WorkshopItemDetails").Sub("3070290869") != nil {
+		t.Fatalf("the acf must forget the item: %s", app)
+	}
+	if app.Str("SizeOnDisk") != "0" {
+		t.Fatalf("SizeOnDisk: %q", app.Str("SizeOnDisk"))
+	}
+}
+
+func readVolumeACF(t *testing.T, vol string) *workshop.KV {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(vol, workshop.VolACF))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kv, err := workshop.ParseACF(string(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return kv
+}
+
+func TestStaleComparesTheNewestStoredVersion(t *testing.T) {
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	if _, err := store.Sync(volume(t, realACF), me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if s := store.Stale(map[string]string{"3070290869": "4513804927223833942", "1": "2"}); len(s) != 0 {
+		t.Fatalf("current or unknown items are not stale: %v", s)
+	}
+	if s := store.Stale(map[string]string{"3070290869": "9"}); !s["3070290869"] || len(s) != 1 {
+		t.Fatalf("a newer upstream manifest must mark it stale: %v", s)
+	}
+}
+
+// `cs2node workshop sync` must ask Steam like the daemon does, or it puts
+// the old version straight back.
+func TestCLISyncDropsWhatSteamUpdated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"8888888888888888888"}]}}`))
+	}))
+	defer srv.Close()
+	old := workshop.DetailsURL
+	workshop.DetailsURL = srv.URL
+	defer func() { workshop.DetailsURL = old }()
+
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	vol := volume(t, realACF)
+	if _, err := store.Sync(vol, me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	tools := &workshop.Tools{Cfg: workshop.Config{Seed: true}, Store: store, Out: io.Discard, HTTP: srv.Client()}
+	conts := []core.Container{{Name: "srv", Volume: vol, Owner: me()}}
+	if err := tools.Sync(context.Background(), conts, map[string]bool{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	assertNotInstalled(t, vol)
+}
+
+func TestLatestSkipsGoneItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"response":{"publishedfiledetails":[
+			{"publishedfileid":"1","result":1,"hcontent_file":"11"},
+			{"publishedfileid":"2","result":9},
+			{"publishedfileid":"3","result":1,"hcontent_file":""}
+		]}}`))
+	}))
+	defer srv.Close()
+	old := workshop.DetailsURL
+	workshop.DetailsURL = srv.URL
+	defer func() { workshop.DetailsURL = old }()
+
+	got, err := workshop.Latest(context.Background(), srv.Client(), []string{"1", "2", "3"})
+	if err != nil || len(got) != 1 || got["1"] != "11" {
+		t.Fatalf("latest: %v %v", got, err)
 	}
 }
 
@@ -313,15 +410,19 @@ func TestOnlyOneServerDownloadsAnUpdate(t *testing.T) {
 	const v1 = "4513804927223833942"
 	const v2 = "8888888888888888888"
 
-	// Steam reports a newer version: the first server to boot gets its
-	// files back so its own Steam client can update them
+	// Steam reports a newer version: the first server to boot loses the
+	// item, so its own Steam client fetches the current one
 	rep, err := store.Sync(a, me(), true, map[string]bool{"3070290869": true})
 	if err != nil || len(rep.Released) != 1 {
-		t.Fatalf("release: %+v %v", rep, err)
+		t.Fatalf("drop: %+v %v", rep, err)
 	}
-	// that server downloads v2 over the released files and records it
+	// that server downloads v2 and records it
+	content := filepath.Join(a, workshop.VolContent, "3070290869")
+	if err := os.MkdirAll(content, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	for _, f := range []string{"3070290869_dir.vpk", "3070290869_000.vpk"} {
-		if err := os.WriteFile(filepath.Join(a, workshop.VolContent, "3070290869", f), []byte(strings.Repeat("n", 3072)), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(content, f), []byte(strings.Repeat("n", 3072)), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}

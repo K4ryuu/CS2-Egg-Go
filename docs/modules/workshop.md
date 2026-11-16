@@ -35,17 +35,17 @@ sequenceDiagram
 
 1. Items the server downloaded itself move into the node's store and come back as links.
 2. Items the store already holds arrive as links, with the matching `appworkshop_730.acf` entries, so the server never downloads them. Turn this off with `seed: false`.
-3. An item whose author published a new version is handed back as real files, so the server can update it the normal way.
+3. An item whose author published a new version is dropped from the server, files and `appworkshop_730.acf` entry both, so the game and MultiAddonManager or AddonsManager download the current version the normal way.
 
 All of it happens before the game process starts. A running server is never reshaped under its feet.
 
 ## When an addon updates
 
-The node asks Steam every `check_minutes` which version is current, and it also reads the server's own bookkeeping: when the engine records that a newer version exists, it is about to fetch it.
+The node asks Steam which version is current every time a server boots, and every `check_minutes` for `cs2node status`. It also reads the server's own bookkeeping: when the engine records that a newer version exists, it is about to fetch it.
 
 Then exactly one server does the downloading:
 
-1. The next server to boot with that item gets real files back and updates them itself.
+1. The next server to boot with that item loses it, so it downloads the new version itself. To the game and the addon plugins the item is simply not installed, which is the one state they always fetch, whatever their re-download settings say.
 2. On its next boot the node takes the new version over, stored beside the old one.
 3. Every other server stops being out of date the moment the store has the new version. They are relinked to it on their next boot, bookkeeping and all, and download nothing.
 

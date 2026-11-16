@@ -210,14 +210,14 @@ type Report struct {
 	Absorbed []Item // moved into the store, the volume now links
 	Linked   []Item // already stored, the volume's copies replaced by links
 	Seeded   []Item // handed to a server that never had them
-	Released []Item // handed back as real files so the server can update
+	Released []Item // dropped as outdated, the server downloads the update itself
 	Freed    int64  // bytes the volume no longer holds
 }
 
 // Sync brings one volume in line with the store: every real addon it holds
-// goes into the store and becomes links, every stale link becomes a real
-// file again, and (when seed is set) everything else in the store is
-// offered to the server. The container must not be running.
+// goes into the store and becomes links, every outdated item is dropped so
+// the server downloads the update, and (when seed is set) everything else
+// in the store is offered to the server. The container must not be running.
 func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string]bool) (Report, error) {
 	var rep Report
 	root, err := os.OpenRoot(volume)
@@ -252,15 +252,15 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 		switch {
 		case payload == 0 && len(links) == 0:
 			continue
-		case payload == 0: // ours already
-			if stale[id] || pending {
-				if it, ok := newest[id]; ok {
-					if err := s.release(root, it, owner); err == nil {
-						rep.Released = append(rep.Released, it)
-					}
-				}
-				continue
+		// outdated: links into the store, or real copies of the very version
+		// the store is behind on (an older node handed those back as files)
+		case payload == 0 && (stale[id] || pending), stale[id] && manifest == newest[id].Manifest:
+			if err := drop(root, id, installed, details); err != nil {
+				return rep, fmt.Errorf("%s: %w", id, err)
 			}
+			rep.Released = append(rep.Released, Item{ID: id, Manifest: manifest})
+			rep.Freed += bytes
+		case payload == 0: // ours already
 			if it, ok := newest[id]; ok {
 				if err := s.link(root, it, owner); err != nil {
 					continue
@@ -429,30 +429,41 @@ func (s Store) link(root *os.Root, it Item, owner core.Owner) error {
 	return nil
 }
 
-// release puts real copies back so the engine can overwrite them.
-func (s Store) release(root *os.Root, it Item, owner core.Owner) error {
-	for _, f := range it.Shared() {
-		rel := VolContent + "/" + it.ID + "/" + f
-		in, err := os.Open(filepath.Join(s.versionDir(it.ID, it.Manifest), f))
-		if err != nil {
-			return err
-		}
-		root.Remove(rel)
-		out, err := root.OpenFile(rel, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err != nil {
-			in.Close()
-			return err
-		}
-		_, err = io.Copy(out, in)
-		in.Close()
-		out.Close()
-		if err != nil {
-			root.Remove(rel)
-			return err
-		}
-		root.Chown(rel, owner.UID, owner.GID)
+// drop makes a volume forget an item: no files, no acf entries. Real files
+// with the old entry look installed, and MultiAddonManager and AddonsManager
+// never update an installed addon with their re-download options off. A
+// missing one is fetched by the engine and both plugins, current version.
+func drop(root *os.Root, id string, installed, details *KV) error {
+	if err := root.RemoveAll(VolContent + "/" + id); err != nil {
+		return err
 	}
+	installed.Delete(id)
+	details.Delete(id)
 	return nil
+}
+
+// Stale lists the items whose newest stored version is behind upstream, the
+// manifest Steam reports per item. A stored version with no usable id
+// cannot be compared, so it is never stale, just old.
+func (s Store) Stale(upstream map[string]string) map[string]bool {
+	stale := map[string]bool{}
+	all := s.NewestAll() // one walk, not one per item
+	for id, want := range upstream {
+		if newest, have := all[id]; have && ValidManifest(newest.Manifest) && newest.Manifest != want {
+			stale[id] = true
+		}
+	}
+	return stale
+}
+
+// IDs lists every stored item once.
+func (s Store) IDs() []string {
+	var ids []string
+	for id := range s.NewestAll() {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // Prune drops stored versions nothing points at any more, older than

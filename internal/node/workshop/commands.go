@@ -47,26 +47,9 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 			users[key] = append(users[key], cont.Name)
 		}
 	}
-	stale := map[string]bool{}
-	if t.HTTP != nil {
-		var ids []string
-		seen := map[string]bool{}
-		for _, it := range items {
-			if !seen[it.ID] {
-				seen[it.ID] = true
-				ids = append(ids, it.ID)
-			}
-		}
-		if details, err := Details(ctx, t.HTTP, ids); err == nil {
-			all := t.Store.NewestAll() // one walk, not one per listed item
-			for _, it := range items {
-				if d, ok := details[it.ID]; ok && !d.Missing && d.Manifest != "" {
-					if newest, have := all[it.ID]; have && ValidManifest(newest.Manifest) && newest.Manifest != d.Manifest {
-						stale[it.ID] = true
-					}
-				}
-			}
-		}
+	stale, err := t.stale(ctx)
+	if err != nil {
+		ui.Warn(w, "could not ask Steam for updates: %v", err)
 	}
 	var total, saved int64
 	rows := make([][]string, 0, len(items))
@@ -112,14 +95,30 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 	return nil
 }
 
+// stale asks Steam which stored items moved on.
+func (t *Tools) stale(ctx context.Context) (map[string]bool, error) {
+	if t.HTTP == nil {
+		return nil, nil
+	}
+	latest, err := Latest(ctx, t.HTTP, t.Store.IDs())
+	if err != nil {
+		return nil, err
+	}
+	return t.Store.Stale(latest), nil
+}
+
 // Sync is `cs2node workshop sync [server]`: the same pass the egg asks for
 // at boot, for servers that are not running.
-func (t *Tools) Sync(conts []core.Container, running map[string]bool, only string) error {
+func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[string]bool, only string) error {
 	w := t.Out
 	ui.Section(w, "cs2node workshop sync")
 	only, err := core.PickName(core.Names(conts), only)
 	if err != nil {
 		return err
+	}
+	stale, err := t.stale(ctx)
+	if err != nil {
+		ui.Warn(w, "could not ask Steam for updates, outdated items stay linked: %v", err)
 	}
 	done := false
 	for _, cont := range conts {
@@ -131,13 +130,13 @@ func (t *Tools) Sync(conts []core.Container, running map[string]bool, only strin
 			ui.Warn(w, "%s is running, skipped: stop it first, or let its next boot do this", ui.Bold(ui.ServerID(cont.Name)))
 			continue
 		}
-		rep, err := t.Store.Sync(cont.Volume, cont.Owner, t.Cfg.Seed, nil)
+		rep, err := t.Store.Sync(cont.Volume, cont.Owner, t.Cfg.Seed, stale)
 		if err != nil {
 			ui.Error(w, "%s: %v", cont.Name, err)
 			continue
 		}
-		ui.Ok(w, "%s: %d absorbed, %d linked, %d seeded, %s freed", ui.Bold(ui.ServerID(cont.Name)),
-			len(rep.Absorbed), len(rep.Linked), len(rep.Seeded), ui.Size(rep.Freed))
+		ui.Ok(w, "%s: %d absorbed, %d linked, %d seeded, %d dropped for update, %s freed", ui.Bold(ui.ServerID(cont.Name)),
+			len(rep.Absorbed), len(rep.Linked), len(rep.Seeded), len(rep.Released), ui.Size(rep.Freed))
 	}
 	if !done {
 		return errors.New("no matching server volume (cs2node status)")
