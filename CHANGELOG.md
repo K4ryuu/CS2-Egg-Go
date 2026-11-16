@@ -2,6 +2,17 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
+## [1.2.0] - 2026-11-16
+
+### Changed
+
+- The image is built on SteamRT4 instead of SteamRT3 (sniper). Nothing changes on the panel side: same image tags, same egg.
+- Go 1.27.4 and every module updated, which also fixes the otel/trace attribute length limit bypass ([#7](https://github.com/K4ryuu/CS2-Egg-Go/pull/7)).
+
+### Fixed
+
+- A workshop addon whose author published an update never updated on servers using the workshop cache ([#8](https://github.com/K4ryuu/CS2-Egg-Go/issues/8)). The outdated item went back to the server as real files with its old `appworkshop_730.acf` entry, and MultiAddonManager and AddonsManager skip an item that looks installed unless their re-download option is on. The outdated item is now removed from the server, files and acf entry both, so the game and both plugins download the current version. The node also asks Steam at every boot instead of trusting a check up to `check_minutes` old, and `cs2node workshop sync` now handles updates too instead of linking the old version back.
+
 ## [1.1.2] - 2026-11-09
 
 ### Fixed
