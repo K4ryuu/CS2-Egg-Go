@@ -160,7 +160,8 @@ func TestABetaGivesWayToStable(t *testing.T) {
 	}{
 		{"v1.5.3-beta.14", false, "v1.5.3-beta.14", "v1.5.2"},
 		{"v1.5.3", false, "v1.5.2", "v1.5.3"},
-		{"v2.0.0-alpha.1", true, "v1.5.2", "v1.5.2"},
+		{"v2.0.0-alpha.1", true, "v1.5.2", "v2.0.0-alpha.1"},
+		{"v1.5.3-beta.14", true, "v1.5.3", "v1.5.3"},
 		{"v1.5.3-beta.15", true, "v1.5.3-beta.14", "v1.5.3-beta.15"},
 	} {
 		newest = c.newest

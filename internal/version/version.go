@@ -48,8 +48,9 @@ func Compare(a, b string) int {
 	return compareChunks(pa, pb)
 }
 
-var semverPre = regexp.MustCompile(`^v?[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z.+-]+$`)
+var semverPre = regexp.MustCompile(`^v?[0-9]+(\.[0-9]+)+-[0-9A-Za-z.+-]+$`)
 
+// IsPrerelease reports whether v carries a "-prerelease" suffix.
 func IsPrerelease(v string) bool { return semverPre.MatchString(v) }
 
 func split(v string) (core, pre string) {

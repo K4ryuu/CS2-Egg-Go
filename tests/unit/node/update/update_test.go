@@ -20,8 +20,11 @@ import (
 
 func sum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 
-func server(t *testing.T, binary []byte, sums string) *httptest.Server {
+func server(t *testing.T, binary []byte, sums string, list ...string) *httptest.Server {
 	t.Helper()
+	if list == nil {
+		list = []string{"v2.2.0-beta.3", "v2.1.0"}
+	}
 	var srv *httptest.Server
 	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rel := func(tag string, pre bool) string {
@@ -33,7 +36,11 @@ func server(t *testing.T, binary []byte, sums string) *httptest.Server {
 		case "/repos/" + update.Repo + "/releases/latest":
 			w.Write([]byte(rel("v2.1.0", false)))
 		case "/repos/" + update.Repo + "/releases":
-			w.Write([]byte("[" + rel("v2.2.0-beta.3", true) + "," + rel("v2.1.0", false) + "]"))
+			var out []string
+			for _, tag := range list {
+				out = append(out, rel(tag, strings.Contains(tag, "-")))
+			}
+			w.Write([]byte("[" + strings.Join(out, ",") + "]"))
 		case "/dl/bin":
 			w.Write(binary)
 		case "/dl/sums":
@@ -84,6 +91,19 @@ func TestCheckFollowsTheChannel(t *testing.T) {
 	}
 	if _, err := update.Check(ctx, srv.Client(), "nightly", "1.0.0"); err == nil {
 		t.Fatal("unknown channel must fail")
+	}
+}
+
+func TestBetaChannelKeepsANewerBeta(t *testing.T) {
+	bin := []byte("new-binary")
+	srv := server(t, bin, sum(bin)+"  cs2node_linux_amd64\n", "v2.1.1", "v2.2.0-beta.3", "v2.1.0")
+	defer srv.Close()
+	if c, err := update.Check(context.Background(), srv.Client(), "beta", "2.2.0-beta.3"); !errors.Is(err, update.ErrUpToDate) {
+		t.Fatalf("beta went back to an older stable: %+v %v", c, err)
+	}
+	c, err := update.Check(context.Background(), srv.Client(), "beta", "2.1.0")
+	if err != nil || c.Version != "2.1.1" {
+		t.Fatalf("beta still takes a newer stable: %+v %v", c, err)
 	}
 }
 

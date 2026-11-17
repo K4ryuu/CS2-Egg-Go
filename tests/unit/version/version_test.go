@@ -39,6 +39,8 @@ func TestIsPrereleaseOnlyTakesSemverSuffixes(t *testing.T) {
 		"1.0.0-rc1":         true,
 		"v2.0.0-alpha.1":    true,
 		"v0.2.0-beta.1+425": true,
+		"v1.2-beta":         true,
+		"v1.0.300.1-rc":     true,
 		"v1.5.3":            false,
 		"v1.0.380":          false,
 		"git-227":           false,

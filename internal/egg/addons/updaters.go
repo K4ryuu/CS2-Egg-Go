@@ -119,7 +119,7 @@ func (e *Env) decide(label, key, latest string, pinned bool) bool {
 		e.Log.Logf(logx.Success, "%s is up-to-date (%s)", label, current)
 		return false
 	case Downgrade:
-		if version.IsPrerelease(current) && !version.IsPrerelease(latest) {
+		if !e.Prerelease && version.IsPrerelease(current) && !version.IsPrerelease(latest) {
 			e.Log.Logf(logx.Info, "%s %s is a prerelease, moving to stable %s", label, current, latest)
 			return true
 		}

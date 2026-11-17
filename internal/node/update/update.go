@@ -56,7 +56,7 @@ func Check(ctx context.Context, client *http.Client, channel, current string) (*
 		return nil, err
 	}
 	cmp := version.Compare(rel.Tag, current)
-	leaveBeta := version.IsPrerelease(current) && !version.IsPrerelease(rel.Tag)
+	leaveBeta := channel == "stable" && version.IsPrerelease(current) && !version.IsPrerelease(rel.Tag)
 	if cmp == 0 || cmp < 0 && !leaveBeta {
 		return nil, ErrUpToDate
 	}

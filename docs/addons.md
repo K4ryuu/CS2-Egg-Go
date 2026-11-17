@@ -20,7 +20,7 @@ KitsuneLab | OK    | CounterStrikeSharp updated to v1.0.374
 
 Rules it follows:
 
-- An installed version newer than the release is left alone, so a manual upgrade is not undone. One exception: an installed prerelease gives way to a stable release, even an older one. With `PRERELEASE` off that is the latest stable; with it on, a stable published after the beta.
+- An installed version newer than the release is left alone, so a manual upgrade is not undone. Exception: with `PRERELEASE` off, an installed prerelease goes back to the latest stable.
 - `versions.txt` is only written after the files are in place. A failed copy is retried next boot instead of being recorded as done.
 - GitHub answering 403 or 429 means rate limited: the check is skipped for this boot, the installed version keeps running, and the console says so. With the [addon cache](modules/addon-cache.md) on the node, this stops happening.
 - SwiftlyS2 over an existing install refreshes `bin/` and `gamedata/` only, so your configs and plugins survive.
