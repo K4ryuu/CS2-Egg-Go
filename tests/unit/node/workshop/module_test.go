@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -123,4 +125,60 @@ func TestServersBootingTogetherAskSteamOnce(t *testing.T) {
 	if n := asked.Load(); n != 1 {
 		t.Fatalf("Steam asked %d times", n)
 	}
+}
+
+// the boot check only knew the stored items, a new one was absorbed unchecked
+func TestBootSyncAsksSteamAboutNewItems(t *testing.T) {
+	booted := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(booted) })
+		r.ParseForm()
+		if !strings.Contains(r.PostForm.Encode(), "3070290869") {
+			w.Write([]byte(`{"response":{"publishedfiledetails":[]}}`))
+			return
+		}
+		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"8888888888888888888","time_updated":1799999999}]}}`))
+	}))
+	defer srv.Close()
+	old := workshop.DetailsURL
+	workshop.DetailsURL = srv.URL
+	defer func() { workshop.DetailsURL = old }()
+
+	vol := shortTempDir(t)
+	if err := os.CopyFS(vol, os.DirFS(volume(t, realACF))); err != nil {
+		t.Fatal(err)
+	}
+	cfg := nodeconfig.Default()
+	wcfg := workshop.Defaults()
+	wcfg.Dir = t.TempDir()
+	os.MkdirAll(filepath.Join(wcfg.Dir, workshop.AppID, "1"), 0o755) // so the boot check asks Steam at all
+	cfg.SetSection("workshop", wcfg)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := core.New(&fakeDocker{running: []core.Container{{ID: "0", Name: "srv", Volume: vol, Owner: me()}}}, cfg, []string{"workshop"}, log)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	go workshop.New(log, srv.Client()).Run(ctx, c)
+	select {
+	case <-booted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no boot check")
+	}
+	cl, err := nodeclient.Connect(ctx, core.SocketPath(vol), 3*time.Second, proto.Hello{BootID: "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	msg, err := cl.Request(&proto.WorkshopSync{}, 10*time.Second, func(m proto.Message) bool {
+		_, ok := m.(*proto.WorkshopReady)
+		return ok
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := msg.(*proto.WorkshopReady); r.Err != "" || r.Absorbed != 0 || r.Released != 1 {
+		t.Fatalf("want the outdated item released, got %+v", r)
+	}
+	assertNotInstalled(t, vol)
 }

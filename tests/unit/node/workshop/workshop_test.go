@@ -433,6 +433,28 @@ func TestCLISyncDropsWhatSteamUpdated(t *testing.T) {
 	assertNotInstalled(t, vol)
 }
 
+// an item the store never had went in unchecked, old version and all
+func TestCLISyncAsksSteamAboutNewItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"8888888888888888888","time_updated":1799999999}]}}`))
+	}))
+	defer srv.Close()
+	old := workshop.DetailsURL
+	workshop.DetailsURL = srv.URL
+	defer func() { workshop.DetailsURL = old }()
+
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	vol := volume(t, realACF)
+	tools := &workshop.Tools{Cfg: workshop.Config{Seed: true}, Store: store, Out: io.Discard, HTTP: srv.Client()}
+	if err := tools.Sync(context.Background(), []core.Container{{Name: "srv", Volume: vol, Owner: me()}}, map[string]bool{}, ""); err != nil {
+		t.Fatal(err)
+	}
+	assertNotInstalled(t, vol)
+	if len(store.Items()) != 0 {
+		t.Fatal("the outdated version went into the store")
+	}
+}
+
 func TestLatestSkipsGoneItems(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"response":{"publishedfiledetails":[

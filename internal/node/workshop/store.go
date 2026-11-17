@@ -545,6 +545,16 @@ func Used(store Store, volume string) map[string]bool {
 	return out
 }
 
+// VolumeIDs lists the workshop items a volume holds.
+func VolumeIDs(volume string) []string {
+	root, err := os.OpenRoot(volume)
+	if err != nil {
+		return nil
+	}
+	defer root.Close()
+	return itemIDs(root)
+}
+
 // manifestOf reads the version out of a link target.
 func manifestOf(target string) string {
 	parts := strings.Split(strings.TrimSuffix(target, "/"), "/")

@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"syscall"
@@ -178,6 +179,7 @@ func (m *Module) sync(ctx context.Context, c *core.Core, container string) {
 	// ask Steam now: an update since the last check would get linked in its old version
 	fresh, cancel := context.WithTimeout(ctx, 5*time.Second)
 	m.checkUpdates(fresh, time.Minute)
+	m.checkNew(fresh, cont.Volume)
 	cancel()
 	rep, err := m.store.Sync(cont.Volume, cont.Owner, m.cfg.Seed, m.upstreamNow())
 	if err != nil {
@@ -239,6 +241,26 @@ func (m *Module) checkUpdates(ctx context.Context, maxAge time.Duration) {
 	m.mu.Lock()
 	maps.Copy(m.upstream, latest)
 	m.checked = time.Now()
+	m.mu.Unlock()
+}
+
+// checkNew asks Steam about the items a volume holds that the node has no
+// answer for yet, so an outdated one is dropped instead of absorbed.
+func (m *Module) checkNew(ctx context.Context, volume string) {
+	ids := VolumeIDs(volume)
+	m.mu.Lock()
+	ids = slices.DeleteFunc(ids, func(id string) bool { _, ok := m.upstream[id]; return ok })
+	m.mu.Unlock()
+	if len(ids) == 0 {
+		return
+	}
+	latest, err := Latest(ctx, m.HTTP, ids)
+	if err != nil {
+		m.Log.Debug("workshop check of new items failed", "err", err)
+		return
+	}
+	m.mu.Lock()
+	maps.Copy(m.upstream, latest)
 	m.mu.Unlock()
 }
 

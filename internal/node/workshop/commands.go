@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -96,12 +97,18 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 	return nil
 }
 
-// latest asks Steam for the current version of every stored item.
-func (t *Tools) latest(ctx context.Context) (map[string]Detail, error) {
+// latest asks Steam for the current version of every stored item, plus
+// whatever the given volumes hold that the store does not have yet.
+func (t *Tools) latest(ctx context.Context, volumes ...string) (map[string]Detail, error) {
 	if t.HTTP == nil {
 		return nil, nil
 	}
-	return Latest(ctx, t.HTTP, t.Store.IDs())
+	ids := t.Store.IDs()
+	for _, v := range volumes {
+		ids = append(ids, VolumeIDs(v)...)
+	}
+	slices.Sort(ids)
+	return Latest(ctx, t.HTTP, slices.Compact(ids))
 }
 
 // Sync is `cs2node workshop sync [server]`: the same pass the egg asks for
@@ -113,7 +120,11 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 	if err != nil {
 		return err
 	}
-	latest, err := t.latest(ctx)
+	var vols []string
+	for _, cont := range conts {
+		vols = append(vols, cont.Volume)
+	}
+	latest, err := t.latest(ctx, vols...)
 	if err != nil {
 		ui.Warn(w, "could not ask Steam for updates, outdated items stay linked: %v", err)
 	}
