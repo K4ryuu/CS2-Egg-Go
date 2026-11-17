@@ -72,7 +72,7 @@
 | `dir` | `/srv/cs2-workshop` | The node's copy of every item. Same filesystem as the volumes makes absorbing instant |
 | `mount` | `/tmp/cs2-workshop` | Where that directory appears inside every container |
 | `seed` | `true` | Offer every cached item to every server |
-| `keep_days` | `30` | Drop a version no server has linked for this many days. `0` keeps them |
+| `keep_days` | `7` | Drop a version no server has linked for this many days. `0` keeps them |
 | `check_minutes` | `360` | How often Steam is asked which version is current |
 | `prune_hours` | `24` | How often unused versions are cleared out, and once after the daemon starts. `0` leaves it to `cs2node workshop prune` |
 

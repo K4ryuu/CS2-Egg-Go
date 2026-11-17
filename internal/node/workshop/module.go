@@ -41,7 +41,7 @@ var PruneDelay = time.Minute
 
 // Defaults is what the wizard offers.
 func Defaults() Config {
-	return Config{Enabled: true, Dir: "/srv/cs2-workshop", Mount: "/tmp/cs2-workshop", Seed: true, KeepDays: 30, CheckMinutes: 360, PruneHours: 24}
+	return Config{Enabled: true, Dir: "/srv/cs2-workshop", Mount: "/tmp/cs2-workshop", Seed: true, KeepDays: 7, CheckMinutes: 360, PruneHours: 24}
 }
 
 // Check rejects what the daemon cannot run with.

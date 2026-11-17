@@ -6,7 +6,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 
 ### Added
 
-- The workshop cache clears out unused addon versions by itself, every `prune_hours` (24 by default, asked at install, `0` leaves it to `cs2node workshop prune`). A version goes once no server, running or stopped, has linked it for `keep_days`.
+- The workshop cache clears out unused addon versions by itself, every `prune_hours` (24 by default, asked at install, `0` leaves it to `cs2node workshop prune`). A version goes once no server, running or stopped, has linked it for `keep_days`, now 7 by default instead of 30.
 
 ### Changed
 
