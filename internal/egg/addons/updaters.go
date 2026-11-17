@@ -4,6 +4,7 @@ package addons
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,8 +19,10 @@ import (
 	"github.com/K4ryuu/CS2-Egg-Go/internal/version"
 )
 
-// DotNetVersion is the runtime ModSharp ships against. Pinned on purpose.
+// DotNetVersion is the fallback when the ModSharp core names no runtime.
 const DotNetVersion = "10.0.0"
+
+var reDotNet = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // DotNetURL is overridden by tests.
 var DotNetURL = "https://dotnetcli.azureedge.net/dotnet/Runtime/%s/dotnet-runtime-%s-linux-x64.tar.gz"
@@ -255,14 +258,21 @@ func (e *Env) simpleZip(ctx context.Context, label, key, repo, pattern, tmpName 
 	return nil
 }
 
-// UpdateModSharp installs the pinned .NET runtime, then core into game/ and
-// extensions into game/sharp/shared/, keeping core.json and admins.jsonc.
+// UpdateModSharp installs core into game/ and extensions into
+// game/sharp/shared/, keeping core.json and admins.jsonc, then the .NET
+// runtime the installed core was built for.
 func (e *Env) UpdateModSharp(ctx context.Context) error {
 	sharp := filepath.Join(e.Root, "game", "sharp")
-	if err := e.dotnet(ctx, sharp); err != nil {
-		e.Log.Log(logx.Error, "Failed to install .NET runtime, aborting ModSharp update")
-		return err
+	err := e.updateSharp(ctx, sharp)
+	// runs on a failed update too, the installed core still needs its runtime
+	if derr := e.dotnet(ctx, sharp, e.dotnetVersion(sharp)); derr != nil {
+		e.Log.Log(logx.Error, "Failed to install .NET runtime, ModSharp will not load without it")
+		return derr
 	}
+	return err
+}
+
+func (e *Env) updateSharp(ctx context.Context, sharp string) error {
 	rel, err := e.release(ctx, "ModSharp", RepoModSharp, e.Prerelease)
 	if err != nil {
 		return err
@@ -309,23 +319,44 @@ func (e *Env) UpdateModSharp(ctx context.Context) error {
 	return nil
 }
 
-func (e *Env) dotnet(ctx context.Context, sharp string) error {
+// dotnetVersion reads the runtime the installed core was built for, so a
+// ModSharp moving to a new .NET brings it along without an egg update.
+func (e *Env) dotnetVersion(sharp string) string {
+	var rc struct {
+		RuntimeOptions struct{ Framework struct{ Version string } }
+	}
+	data, err := os.ReadFile(filepath.Join(sharp, "core", "Sharp.Core.runtimeconfig.json"))
+	if err == nil {
+		err = json.Unmarshal(data, &rc)
+	}
+	// it ends up in a URL, only a plain x.y.z goes
+	if v := rc.RuntimeOptions.Framework.Version; err == nil && !reDotNet.MatchString(v) {
+		err = fmt.Errorf("not a version: %q", v)
+	}
+	if err != nil {
+		e.Log.Logf(logx.Debug, "No .NET version from the ModSharp core (%v), using %s", err, DotNetVersion)
+		return DotNetVersion
+	}
+	return rc.RuntimeOptions.Framework.Version
+}
+
+func (e *Env) dotnet(ctx context.Context, sharp, version string) error {
 	runtime := filepath.Join(sharp, "runtime")
-	if e.Versions.Get("DotNet") == DotNetVersion {
+	if e.Versions.Get("DotNet") == version {
 		if _, err := os.Stat(filepath.Join(runtime, "dotnet")); err == nil {
-			e.Log.Logf(logx.Debug, ".NET runtime already up to date: %s", DotNetVersion)
+			e.Log.Logf(logx.Debug, ".NET runtime already up to date: %s", version)
 			return nil
 		}
 	}
-	e.Log.Logf(logx.Running, "Installing .NET %s runtime...", DotNetVersion)
+	e.Log.Logf(logx.Running, "Installing .NET %s runtime...", version)
 	os.MkdirAll(runtime, 0o755)
-	url := fmt.Sprintf(DotNetURL, DotNetVersion, DotNetVersion)
+	url := fmt.Sprintf(DotNetURL, version, version)
 	if err := e.fetchAndExtract(ctx, url, filepath.Join(e.Temp, "dotnet-runtime.tar.gz"), runtime); err != nil {
 		e.Log.Log(logx.Error, "Failed to install .NET runtime")
 		return err
 	}
-	e.Versions.Set("DotNet", DotNetVersion)
-	e.Log.Logf(logx.Success, ".NET %s runtime installed successfully", DotNetVersion)
+	e.Versions.Set("DotNet", version)
+	e.Log.Logf(logx.Success, ".NET %s runtime installed successfully", version)
 	return nil
 }
 

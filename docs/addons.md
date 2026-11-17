@@ -24,7 +24,7 @@ Rules it follows:
 - `versions.txt` is only written after the files are in place. A failed copy is retried next boot instead of being recorded as done.
 - GitHub answering 403 or 429 means rate limited: the check is skipped for this boot, the installed version keeps running, and the console says so. With the [addon cache](modules/addon-cache.md) on the node, this stops happening.
 - SwiftlyS2 over an existing install refreshes `bin/` and `gamedata/` only, so your configs and plugins survive.
-- ModSharp keeps `configs/core.json` and `admins.jsonc` across updates, and installs its own pinned .NET runtime.
+- ModSharp keeps `configs/core.json` and `admins.jsonc` across updates, and installs the .NET runtime its core was built for (read from `Sharp.Core.runtimeconfig.json`).
 
 ## gameinfo.gi
 
