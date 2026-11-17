@@ -10,7 +10,9 @@
 # base is flattened into one layer of our own before anything is stacked on top. The upstream
 # config carries only the default PATH and cosmetic labels, nothing to carry over.
 ARG         BASE=registry.gitlab.steamos.cloud/steamrt/sniper/platform:latest-container-runtime-depot
-FROM        --platform=$BUILDPLATFORM golang:1.27.4-alpine AS build
+# build.sh reads it from go.mod. no default, so a stale copy can't sneak back in
+ARG         GO_VERSION
+FROM        --platform=$BUILDPLATFORM golang:${GO_VERSION}-alpine AS build
 ARG         VERSION=0.0.0-dev
 ARG         CHANNEL=dev
 ARG         COMMIT=none

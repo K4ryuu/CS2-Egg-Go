@@ -234,8 +234,13 @@ cleanup_untagged() {
     return 0
 }
 
+# same go as CI and release: the go line of go.mod
+GO_VERSION=$(awk '$1 == "go" {print $2; exit}' "$REPO_ROOT/go.mod")
+[[ -n "$GO_VERSION" ]] || { log_error "No go version in go.mod"; exit 1; }
+
 # each tag twice: TAG on the Dockerfile's default SteamRT3, TAG-rt4 on SteamRT4
 BUILD_ARGS=(--builder "$BUILDER" --platform "$BUILD_PLATFORM" -f docker/KitsuneLab-Dockerfile
+            --build-arg "GO_VERSION=$GO_VERSION"
             --build-arg "VERSION=$VERSION" --build-arg "CHANNEL=$CHANNEL" --build-arg "COMMIT=$COMMIT"
             --build-arg "BUILT=$(date -u +%Y-%m-%dT%H:%MZ)")
 
