@@ -132,7 +132,7 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 	var loops sync.WaitGroup
 	defer func() { stop(); loops.Wait() }() // loops are gone once Run returns
 	if m.cfg.Seed && m.cfg.KeepDays > 0 {
-		m.store.MarkInUse("/proc", time.Now()) // before any sync judges what is idle
+		m.markInUse() // before any sync judges what is idle
 		loops.Go(func() { m.watchLoop(ctx) })
 	}
 	items := m.store.Items()
@@ -250,8 +250,14 @@ func (m *Module) watchLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			m.store.MarkInUse("/proc", time.Now())
+			m.markInUse()
 		}
+	}
+}
+
+func (m *Module) markInUse() {
+	if err := m.store.MarkInUse("/proc", time.Now()); err != nil {
+		m.Log.Warn("workshop watch marker", "err", err)
 	}
 }
 

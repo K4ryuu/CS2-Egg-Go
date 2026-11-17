@@ -53,7 +53,9 @@ func TestAnOpenVPKCountsAsUse(t *testing.T) {
 	os.Symlink("/dev/null", filepath.Join(fd, "0"))
 	os.Symlink(store.LinkTarget("3070290869", v1, "3070290869_dir.vpk"), filepath.Join(fd, "7"))
 	os.MkdirAll(filepath.Join(proc, "sys"), 0o755)
-	store.MarkInUse(proc, time.Now())
+	if err := store.MarkInUse(proc, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if !usedLately(t, store) {
 		t.Fatal("an open vpk must restart the clock")
 	}
@@ -78,7 +80,9 @@ func TestSeedLetsGoOfWhatNobodyUsed(t *testing.T) {
 // the node only knows what was used since it started watching
 func TestWatchStartIsAGracePeriod(t *testing.T) {
 	store, vol := stored(t, 30)
-	store.MarkInUse(t.TempDir(), time.Now())
+	if err := store.MarkInUse(t.TempDir(), time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	if rep, err := store.Sync(vol, me(), true, nil); err != nil || len(rep.Released) != 0 {
 		t.Fatalf("dropped right after the watch began: %+v %v", rep, err)
 	}

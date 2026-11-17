@@ -15,10 +15,11 @@ const watchMarker = ".watched"
 
 // MarkInUse touches every stored version a process has open (the engine
 // keeps mounted vpks open). With seed on, that's the only real use signal.
-func (s Store) MarkInUse(proc string, now time.Time) {
+// The error is only the marker's: without it an upgrade looks like idle time.
+func (s Store) MarkInUse(proc string, now time.Time) (err error) {
 	marker := filepath.Join(s.Dir, watchMarker)
-	if _, err := os.Stat(marker); err != nil {
-		os.WriteFile(marker, nil, 0o644)
+	if _, statErr := os.Stat(marker); statErr != nil {
+		err = os.WriteFile(marker, nil, 0o644)
 	}
 	prefix := s.Mount + "/" + AppID + "/"
 	pids, _ := os.ReadDir(proc)
@@ -36,6 +37,7 @@ func (s Store) MarkInUse(proc string, now time.Time) {
 			}
 		}
 	}
+	return err
 }
 
 // idle: unused for keep_days, never counting from before the watch marker
