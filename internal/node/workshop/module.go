@@ -64,14 +64,16 @@ type Module struct {
 	// upstream is what Steam last said is current, per item. Staleness is
 	// decided against the store when a server asks, so the first server to
 	// fetch an update spares every other one the download.
-	upstream map[string]string
+	upstream map[string]Detail
+	checked  time.Time
+	checking chan struct{} // one Steam check at a time
 	last     map[string]Report
 	syncing  map[string]bool // one sync per container at a time
 }
 
 // New returns the module with logging and HTTP wired.
 func New(log *slog.Logger, client *http.Client) *Module {
-	return &Module{Log: log, HTTP: client, upstream: map[string]string{}, last: map[string]Report{}}
+	return &Module{Log: log, HTTP: client, upstream: map[string]Detail{}, checking: make(chan struct{}, 1), last: map[string]Report{}}
 }
 
 func (m *Module) Name() string { return "workshop" }
@@ -175,23 +177,21 @@ func (m *Module) sync(ctx context.Context, c *core.Core, container string) {
 	m.mount(cont) // the links are useless without it
 	// ask Steam now: an update since the last check would get linked in its old version
 	fresh, cancel := context.WithTimeout(ctx, 5*time.Second)
-	m.checkUpdates(fresh)
+	m.checkUpdates(fresh, time.Minute)
 	cancel()
-	stale := m.staleNow()
-	rep, err := m.store.Sync(cont.Volume, cont.Owner, m.cfg.Seed, stale)
+	rep, err := m.store.Sync(cont.Volume, cont.Owner, m.cfg.Seed, m.upstreamNow())
 	if err != nil {
 		reply.Err = err.Error()
 		m.Log.Warn("workshop sync failed", "container", container, "err", err)
-	} else {
-		m.mu.Lock()
-		m.last[container] = rep
-		m.mu.Unlock()
-		reply.Absorbed, reply.Linked, reply.Seeded, reply.Released = len(rep.Absorbed), len(rep.Linked), len(rep.Seeded), len(rep.Released)
-		reply.Freed = rep.Freed
-		if n := len(rep.Absorbed) + len(rep.Linked) + len(rep.Seeded) + len(rep.Released); n > 0 {
-			m.Log.Info("workshop synced", "container", container, "absorbed", len(rep.Absorbed), "linked", len(rep.Linked),
-				"seeded", len(rep.Seeded), "released", len(rep.Released), "freed_mib", rep.Freed>>20)
-		}
+	}
+	m.mu.Lock()
+	m.last[container] = rep
+	m.mu.Unlock()
+	reply.Absorbed, reply.Linked, reply.Seeded, reply.Released = len(rep.Absorbed), len(rep.Linked), len(rep.Seeded), len(rep.Released)
+	reply.Freed = rep.Freed
+	if n := len(rep.Absorbed) + len(rep.Linked) + len(rep.Seeded) + len(rep.Released); n > 0 {
+		m.Log.Info("workshop synced", "container", container, "absorbed", len(rep.Absorbed), "linked", len(rep.Linked),
+			"seeded", len(rep.Seeded), "released", len(rep.Released), "freed_mib", rep.Freed>>20)
 	}
 	c.Send(container, reply)
 }
@@ -202,7 +202,9 @@ func (m *Module) updateLoop(ctx context.Context) {
 	t := time.NewTicker(time.Duration(m.cfg.CheckMinutes) * time.Minute)
 	defer t.Stop()
 	for {
-		m.checkUpdates(ctx)
+		check, cancel := context.WithTimeout(ctx, 30*time.Second)
+		m.checkUpdates(check, 0)
+		cancel()
 		if n := len(m.staleNow()); n > 0 {
 			m.Log.Info("workshop items updated upstream, the first server to boot fetches the new version for everyone", "count", n)
 		}
@@ -214,8 +216,21 @@ func (m *Module) updateLoop(ctx context.Context) {
 	}
 }
 
-// checkUpdates refreshes upstream. On error the last answer stays.
-func (m *Module) checkUpdates(ctx context.Context) {
+// checkUpdates refreshes upstream, unless the last check is younger than
+// maxAge. On error the last answer stays.
+func (m *Module) checkUpdates(ctx context.Context, maxAge time.Duration) {
+	select {
+	case m.checking <- struct{}{}:
+		defer func() { <-m.checking }()
+	case <-ctx.Done():
+		return
+	}
+	m.mu.Lock()
+	recent := time.Since(m.checked) < maxAge
+	m.mu.Unlock()
+	if recent {
+		return
+	}
 	latest, err := Latest(ctx, m.HTTP, m.store.IDs())
 	if err != nil {
 		m.Log.Debug("workshop update check failed", "err", err)
@@ -223,6 +238,7 @@ func (m *Module) checkUpdates(ctx context.Context) {
 	}
 	m.mu.Lock()
 	maps.Copy(m.upstream, latest)
+	m.checked = time.Now()
 	m.mu.Unlock()
 }
 
@@ -230,10 +246,13 @@ func (m *Module) checkUpdates(ctx context.Context) {
 // Steam last reported. It clears itself the moment one server has fetched
 // the update and the node absorbed it.
 func (m *Module) staleNow() map[string]bool {
+	return m.store.Stale(m.upstreamNow())
+}
+
+func (m *Module) upstreamNow() map[string]Detail {
 	m.mu.Lock()
-	upstream := maps.Clone(m.upstream)
-	m.mu.Unlock()
-	return m.store.Stale(upstream)
+	defer m.mu.Unlock()
+	return maps.Clone(m.upstream)
 }
 
 // status is the workshop section of the control snapshot.

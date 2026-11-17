@@ -4,11 +4,14 @@ package workshop
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -168,7 +171,7 @@ func (s Store) Has(id, manifest string) bool {
 	return err == nil
 }
 
-// take moves an item's files out of the volume into the store.
+// take copies an item's files from the volume into the store.
 //
 // Every read of the volume goes through root, never through a path built
 // with filepath.Join. The files were checked with root.Lstat when they were
@@ -180,13 +183,18 @@ func (s Store) Has(id, manifest string) bool {
 // the use agree.
 func (s Store) take(root *os.Root, it Item) error {
 	dir := s.versionDir(it.ID, it.Manifest)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
 		return err
 	}
+	// built aside and renamed in whole, so a failed copy leaves no half version
+	tmp, err := os.MkdirTemp(s.Dir, ".take-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
 	for _, f := range it.Files {
-		rel := path.Join(VolContent, it.ID, f)
-		dst := filepath.Join(dir, f)
-		if err := copyOut(root, rel, dst); err != nil {
+		dst := filepath.Join(tmp, f)
+		if err := copyOut(root, path.Join(VolContent, it.ID, f), dst); err != nil {
 			if f == PublishData {
 				continue // tiny and per-server, not worth failing the sync
 			}
@@ -194,15 +202,22 @@ func (s Store) take(root *os.Root, it Item) error {
 		}
 		// read through a read-only mount by every server: world-readable
 		os.Chmod(dst, 0o644)
-		if f != PublishData {
-			root.Remove(rel) // the volume gets a link back in its place
-		}
 	}
 	meta, err := json.MarshalIndent(it, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "meta.json"), meta, 0o644)
+	if err := os.WriteFile(filepath.Join(tmp, "meta.json"), meta, 0o644); err != nil {
+		return err
+	}
+	os.Chmod(tmp, 0o755)
+	if !s.Has(it.ID, it.Manifest) {
+		os.RemoveAll(dir) // half a version from an older build
+	}
+	if err := os.Rename(tmp, dir); err != nil && !s.Has(it.ID, it.Manifest) {
+		return err
+	}
+	return nil
 }
 
 // Report is what one pass over a volume did.
@@ -211,14 +226,14 @@ type Report struct {
 	Linked   []Item // already stored, the volume's copies replaced by links
 	Seeded   []Item // handed to a server that never had them
 	Released []Item // dropped as outdated, the server downloads the update itself
-	Freed    int64  // bytes the volume no longer holds
+	Freed    int64  // real bytes the volume swapped for links
 }
 
 // Sync brings one volume in line with the store: every real addon it holds
 // goes into the store and becomes links, every outdated item is dropped so
 // the server downloads the update, and (when seed is set) everything else
 // in the store is offered to the server. The container must not be running.
-func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string]bool) (Report, error) {
+func (s Store) Sync(volume string, owner core.Owner, seed bool, upstream map[string]Detail) (Report, error) {
 	var rep Report
 	root, err := os.OpenRoot(volume)
 	if err != nil {
@@ -228,6 +243,7 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 	// one walk of the store for the whole sync: Newest walks it per id, so
 	// asking inside the loop reads every meta.json once per stored item
 	newest := s.NewestAll()
+	stale := staleIn(newest, upstream)
 	acf, err := readACF(root)
 	if err != nil {
 		return rep, err
@@ -235,6 +251,8 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 	installed := acf.Ensure("AppWorkshop").Ensure("WorkshopItemsInstalled")
 	details := acf.Ensure("AppWorkshop").Ensure("WorkshopItemDetails")
 
+	var errs []error
+	fail := func(id string, err error) { errs = append(errs, fmt.Errorf("%s: %w", id, err)) }
 	ids := itemIDs(root)
 	for _, id := range ids {
 		files, links, bytes := itemFiles(root, id)
@@ -249,20 +267,22 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 		// when it says a newer version exists, it is about to download one
 		d := details.Sub(id)
 		pending := d.Str("latest_manifest") != "" && d.Str("latest_manifest") != d.Str("manifest")
+		release := func() {
+			if err := drop(root, id, installed, details); err != nil {
+				fail(id, err)
+				return
+			}
+			rep.Released = append(rep.Released, Item{ID: id, Manifest: manifest})
+		}
 		switch {
 		case payload == 0 && len(links) == 0:
 			continue
-		// outdated: links into the store, or real copies of the very version
-		// the store is behind on (an older node handed those back as files)
-		case payload == 0 && (stale[id] || pending), stale[id] && manifest == newest[id].Manifest:
-			if err := drop(root, id, installed, details); err != nil {
-				return rep, fmt.Errorf("%s: %w", id, err)
-			}
-			rep.Released = append(rep.Released, Item{ID: id, Manifest: manifest})
-			rep.Freed += bytes
+		case payload == 0 && (stale[id] || pending): // links into an outdated version
+			release()
 		case payload == 0: // ours already
 			if it, ok := newest[id]; ok {
 				if err := s.link(root, it, owner); err != nil {
+					fail(id, err)
 					continue
 				}
 				if it.Manifest != manifest {
@@ -281,21 +301,32 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 			it := Item{ID: id, Manifest: manifest, Files: files,
 				Size:    atoi(installed.Sub(id).Str("size")),
 				Updated: atoi(installed.Sub(id).Str("timeupdated"))}
-			if s.Has(id, manifest) {
-				stored, _ := s.read(id, manifest)
-				for _, f := range it.Shared() {
-					root.Remove(VolContent + "/" + id + "/" + f)
-				}
-				it = stored
+			n, has := newest[id]
+			switch {
+			case has && n.Updated > it.Updated && !stale[id]:
+				it = n // store has a newer one
 				rep.Linked = append(rep.Linked, it)
-			} else {
+			case behind(it, upstream[id]):
+				release() // store is behind too
+				continue
+			case s.Has(id, manifest):
+				it, _ = s.read(id, manifest)
+				rep.Linked = append(rep.Linked, it)
+			default:
 				if err := s.take(root, it); err != nil {
-					return rep, fmt.Errorf("%s: %w", id, err)
+					fail(id, err)
+					continue
 				}
 				rep.Absorbed = append(rep.Absorbed, it)
 			}
+			for _, f := range files {
+				if f != PublishData {
+					root.Remove(VolContent + "/" + id + "/" + f)
+				}
+			}
 			if err := s.link(root, it, owner); err != nil {
-				return rep, err
+				fail(id, err)
+				continue
 			}
 			rep.Freed += bytes
 		}
@@ -306,18 +337,15 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 		for _, id := range ids {
 			have[id] = true
 		}
-		for _, it := range s.Items() {
-			if have[it.ID] || stale[it.ID] {
+		for _, id := range slices.Sorted(maps.Keys(newest)) {
+			if have[id] || stale[id] {
 				continue
 			}
-			if newest[it.ID].Manifest != it.Manifest {
-				continue // only the freshest version is offered
-			}
-			if err := s.link(root, it, owner); err != nil {
+			if err := s.link(root, newest[id], owner); err != nil {
+				fail(id, err)
 				continue
 			}
-			have[it.ID] = true
-			rep.Seeded = append(rep.Seeded, it)
+			rep.Seeded = append(rep.Seeded, newest[id])
 		}
 	}
 
@@ -341,10 +369,7 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, stale map[string
 		total += atoi(installed.Sub(id).Str("size"))
 	}
 	acf.Ensure("AppWorkshop").SetStr("SizeOnDisk", strconv.FormatInt(total, 10))
-	if err := writeACF(root, acf, owner); err != nil {
-		return rep, err
-	}
-	return rep, nil
+	return rep, errors.Join(append(errs, writeACF(root, acf, owner))...)
 }
 
 // itemIDs lists the workshop items a volume has a directory for.
@@ -434,35 +459,42 @@ func (s Store) link(root *os.Root, it Item, owner core.Owner) error {
 // never update an installed addon with their re-download options off. A
 // missing one is fetched by the engine and both plugins, current version.
 func drop(root *os.Root, id string, installed, details *KV) error {
-	if err := root.RemoveAll(VolContent + "/" + id); err != nil {
-		return err
-	}
 	installed.Delete(id)
 	details.Delete(id)
-	return nil
+	return root.RemoveAll(VolContent + "/" + id)
 }
 
-// Stale lists the items whose newest stored version is behind upstream, the
-// manifest Steam reports per item. A stored version with no usable id
-// cannot be compared, so it is never stale, just old.
-func (s Store) Stale(upstream map[string]string) map[string]bool {
+// Stale lists the items whose newest stored version is behind what Steam
+// reports.
+func (s Store) Stale(upstream map[string]Detail) map[string]bool {
+	return staleIn(s.NewestAll(), upstream)
+}
+
+func staleIn(newest map[string]Item, upstream map[string]Detail) map[string]bool {
 	stale := map[string]bool{}
-	all := s.NewestAll() // one walk, not one per item
-	for id, want := range upstream {
-		if newest, have := all[id]; have && ValidManifest(newest.Manifest) && newest.Manifest != want {
+	for id, u := range upstream {
+		if n, ok := newest[id]; ok && behind(n, u) {
 			stale[id] = true
 		}
 	}
 	return stale
 }
 
+// behind reports whether Steam serves a newer version than v. A version
+// with no usable id cannot be compared, so it is never behind, just old.
+func behind(v Item, u Detail) bool {
+	return ValidManifest(v.Manifest) && u.Manifest != "" && u.Manifest != v.Manifest && u.Updated > v.Updated
+}
+
 // IDs lists every stored item once.
 func (s Store) IDs() []string {
 	var ids []string
-	for id := range s.NewestAll() {
-		ids = append(ids, id)
+	entries, _ := os.ReadDir(filepath.Join(s.Dir, AppID))
+	for _, e := range entries {
+		if e.IsDir() {
+			ids = append(ids, e.Name())
+		}
 	}
-	sort.Strings(ids)
 	return ids
 }
 

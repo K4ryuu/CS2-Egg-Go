@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+package workshop_test
+
+import (
+	"context"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/nodeclient"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/core"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/nodeconfig"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/workshop"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/proto"
+)
+
+type fakeDocker struct{ running []core.Container }
+
+func (f *fakeDocker) Running(context.Context, []string) ([]core.Container, error) {
+	return f.running, nil
+}
+func (f *fakeDocker) Inspect(_ context.Context, id string) (core.Container, error) {
+	for _, c := range f.running {
+		if c.ID == id {
+			return c, nil
+		}
+	}
+	return core.Container{}, errors.New("no such container")
+}
+func (f *fakeDocker) Events(context.Context, []string) (<-chan core.Event, <-chan error) {
+	return make(chan core.Event), make(chan error)
+}
+
+// socket paths have a length limit, t.TempDir is too deep on macOS
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "cs2w")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return dir
+}
+
+func TestServersBootingTogetherAskSteamOnce(t *testing.T) {
+	var asked atomic.Int32
+	first, hold := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if asked.Add(1) == 1 {
+			close(first)
+			<-hold
+		}
+		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"4513804927223833942","time_updated":1699419831}]}}`))
+	}))
+	defer srv.Close()
+	old := workshop.DetailsURL
+	workshop.DetailsURL = srv.URL
+	defer func() { workshop.DetailsURL = old }()
+
+	dir := t.TempDir()
+	store := workshop.Store{Dir: dir, Mount: "/tmp/cs2-workshop"}
+	if _, err := store.Sync(volume(t, realACF), me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	cfg := nodeconfig.Default()
+	wcfg := workshop.Defaults()
+	wcfg.Dir = dir
+	cfg.SetSection("workshop", wcfg)
+	var conts []core.Container
+	for i := range 4 {
+		conts = append(conts, core.Container{ID: strconv.Itoa(i), Name: "srv" + strconv.Itoa(i), Volume: shortTempDir(t), Owner: me()})
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := core.New(&fakeDocker{running: conts}, cfg, []string{"workshop"}, log)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	go workshop.New(log, srv.Client()).Run(ctx, c)
+	select {
+	case <-first: // the boot check holds Steam while the servers ask
+	case <-time.After(5 * time.Second):
+		t.Fatal("no boot check")
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, len(conts))
+	for _, cont := range conts {
+		wg.Go(func() {
+			cl, err := nodeclient.Connect(ctx, core.SocketPath(cont.Volume), 3*time.Second, proto.Hello{BootID: "b"})
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer cl.Close()
+			msg, err := cl.Request(&proto.WorkshopSync{}, 10*time.Second, func(m proto.Message) bool {
+				_, ok := m.(*proto.WorkshopReady)
+				return ok
+			})
+			if err == nil && msg.(*proto.WorkshopReady).Err != "" {
+				err = errors.New(msg.(*proto.WorkshopReady).Err)
+			}
+			errs <- err
+		})
+	}
+	time.Sleep(300 * time.Millisecond)
+	close(hold)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n := asked.Load(); n != 1 {
+		t.Fatalf("Steam asked %d times", n)
+	}
+}

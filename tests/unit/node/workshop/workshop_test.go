@@ -107,6 +107,15 @@ func volume(t *testing.T, acf string) string {
 
 func me() core.Owner { return core.Owner{UID: os.Getuid(), GID: os.Getgid()} }
 
+const (
+	v1 = "4513804927223833942"
+	v2 = "8888888888888888888"
+)
+
+func steamHasV2() map[string]workshop.Detail {
+	return map[string]workshop.Detail{"3070290869": {Manifest: v2, Updated: 1799999999}}
+}
+
 func TestAbsorbThenShareWithASecondServer(t *testing.T) {
 	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
 	first := volume(t, realACF)
@@ -220,7 +229,7 @@ func TestAStaleItemIsDroppedSoTheServerDownloadsIt(t *testing.T) {
 	if _, err := os.Readlink(link); err != nil {
 		t.Fatal("expected a link after the first pass")
 	}
-	rep, err := store.Sync(vol, me(), true, map[string]bool{"3070290869": true})
+	rep, err := store.Sync(vol, me(), true, steamHasV2())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,11 +247,125 @@ func TestAServerHoldingTheStaleVersionAsFilesIsDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	vol := volume(t, realACF)
-	rep, err := store.Sync(vol, me(), true, map[string]bool{"3070290869": true})
-	if err != nil || len(rep.Released) != 1 || len(rep.Linked) != 0 || rep.Freed != 4096 {
+	rep, err := store.Sync(vol, me(), true, steamHasV2())
+	if err != nil || len(rep.Released) != 1 || len(rep.Linked) != 0 || rep.Freed != 0 {
 		t.Fatalf("real files of the stale version must go: %+v %v", rep, err)
 	}
 	assertNotInstalled(t, vol)
+}
+
+func TestAFailedDropStillForgetsTheItem(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	vol := volume(t, realACF)
+	if _, err := store.Sync(vol, me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(vol, workshop.VolContent, "3070290869")
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if _, err := store.Sync(vol, me(), true, steamHasV2()); err == nil {
+		t.Fatal("the failed removal must be reported")
+	}
+	if app := readVolumeACF(t, vol).Sub("AppWorkshop"); app.Sub("WorkshopItemsInstalled").Sub("3070290869") != nil {
+		t.Fatalf("the acf must forget the item anyway: %s", app)
+	}
+}
+
+func TestAnOlderCopyFollowsTheStoredUpdate(t *testing.T) {
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	a := volume(t, realACF)
+	writeManifest(t, a, v2, v2)
+	if _, err := store.Sync(a, me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	b := volume(t, realACF)
+	rep, err := store.Sync(b, me(), true, steamHasV2())
+	if err != nil || len(rep.Absorbed) != 0 || len(rep.Linked) != 1 || rep.Linked[0].Manifest != v2 || rep.Freed != 4096 {
+		t.Fatalf("must follow v2: %+v %v", rep, err)
+	}
+	target, err := os.Readlink(filepath.Join(b, workshop.VolContent, "3070290869", "3070290869_dir.vpk"))
+	if err != nil || !strings.Contains(target, v2) {
+		t.Fatalf("link: %q %v", target, err)
+	}
+	if d := readVolumeACF(t, b).Sub("AppWorkshop").Sub("WorkshopItemDetails").Sub("3070290869"); d.Str("manifest") != v2 {
+		t.Fatalf("acf still on v1: %s", d)
+	}
+	if n := len(store.Items()); n != 1 {
+		t.Fatalf("v1 must not be taken in: %d versions", n)
+	}
+}
+
+func TestAnOlderCopyIsDroppedWhenTheStoreIsBehindToo(t *testing.T) {
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	a := volume(t, realACF)
+	writeManifest(t, a, v2, v2)
+	if _, err := store.Sync(a, me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	b := volume(t, realACF)
+	v3 := map[string]workshop.Detail{"3070290869": {Manifest: "9999999999999999999", Updated: 1899999999}}
+	rep, err := store.Sync(b, me(), true, v3)
+	if err != nil || len(rep.Released) != 1 || len(rep.Absorbed) != 0 || rep.Freed != 0 {
+		t.Fatalf("v1 must go: %+v %v", rep, err)
+	}
+	assertNotInstalled(t, b)
+	if n := len(store.Items()); n != 1 {
+		t.Fatalf("v1 must not be taken in: %d versions", n)
+	}
+}
+
+func TestAFailedTakeKeepsTheServerCopy(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root reads anything")
+	}
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	vol := volume(t, realACF)
+	dir := filepath.Join(vol, workshop.VolContent, "3070290869")
+	locked := filepath.Join(dir, "3070290869_dir.vpk") // copied after _000
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Sync(vol, me(), true, nil); err == nil {
+		t.Fatal("the failed copy must be reported")
+	}
+	for _, f := range []string{"3070290869_000.vpk", "3070290869_dir.vpk"} {
+		if st, err := os.Lstat(filepath.Join(dir, f)); err != nil || !st.Mode().IsRegular() {
+			t.Fatalf("%s must stay a real file: %v", f, err)
+		}
+	}
+	if left, _ := os.ReadDir(store.Dir); len(store.Items()) != 0 || len(left) > 1 {
+		t.Fatalf("no half version may stay: %v %v", store.Items(), left)
+	}
+	os.Chmod(locked, 0o644)
+	if rep, err := store.Sync(vol, me(), true, nil); err != nil || len(rep.Absorbed) != 1 {
+		t.Fatalf("next boot takes it: %+v %v", rep, err)
+	}
+}
+
+// steam check failing for a while gives an old answer, not an update
+func TestAnOlderSteamAnswerKeepsTheNewerCopy(t *testing.T) {
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	vol := volume(t, realACF)
+	writeManifest(t, vol, v2, v2)
+	if _, err := store.Sync(vol, me(), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	old := map[string]workshop.Detail{"3070290869": {Manifest: v1, Updated: 1699419831}}
+	if s := store.Stale(old); len(s) != 0 {
+		t.Fatalf("not stale: %v", s)
+	}
+	rep, err := store.Sync(vol, me(), true, old)
+	if err != nil || len(rep.Released) != 0 {
+		t.Fatalf("v2 must stay: %+v %v", rep, err)
+	}
+	if _, err := os.Readlink(filepath.Join(vol, workshop.VolContent, "3070290869", "3070290869_dir.vpk")); err != nil {
+		t.Fatalf("v2 must stay linked: %v", err)
+	}
 }
 
 // assertNotInstalled: no files, no links, no acf entry for the test item.
@@ -278,10 +401,10 @@ func TestStaleComparesTheNewestStoredVersion(t *testing.T) {
 	if _, err := store.Sync(volume(t, realACF), me(), true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if s := store.Stale(map[string]string{"3070290869": "4513804927223833942", "1": "2"}); len(s) != 0 {
+	if s := store.Stale(map[string]workshop.Detail{"3070290869": {Manifest: v1, Updated: 1699419831}, "1": {Manifest: "2", Updated: 1}}); len(s) != 0 {
 		t.Fatalf("current or unknown items are not stale: %v", s)
 	}
-	if s := store.Stale(map[string]string{"3070290869": "9"}); !s["3070290869"] || len(s) != 1 {
+	if s := store.Stale(steamHasV2()); !s["3070290869"] || len(s) != 1 {
 		t.Fatalf("a newer upstream manifest must mark it stale: %v", s)
 	}
 }
@@ -290,7 +413,7 @@ func TestStaleComparesTheNewestStoredVersion(t *testing.T) {
 // the old version straight back.
 func TestCLISyncDropsWhatSteamUpdated(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"8888888888888888888"}]}}`))
+		w.Write([]byte(`{"response":{"publishedfiledetails":[{"publishedfileid":"3070290869","result":1,"hcontent_file":"8888888888888888888","time_updated":1799999999}]}}`))
 	}))
 	defer srv.Close()
 	old := workshop.DetailsURL
@@ -324,7 +447,7 @@ func TestLatestSkipsGoneItems(t *testing.T) {
 	defer func() { workshop.DetailsURL = old }()
 
 	got, err := workshop.Latest(context.Background(), srv.Client(), []string{"1", "2", "3"})
-	if err != nil || len(got) != 1 || got["1"] != "11" {
+	if err != nil || len(got) != 1 || got["1"].Manifest != "11" {
 		t.Fatalf("latest: %v %v", got, err)
 	}
 }
@@ -407,12 +530,9 @@ func TestOnlyOneServerDownloadsAnUpdate(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	const v1 = "4513804927223833942"
-	const v2 = "8888888888888888888"
-
 	// Steam reports a newer version: the first server to boot loses the
 	// item, so its own Steam client fetches the current one
-	rep, err := store.Sync(a, me(), true, map[string]bool{"3070290869": true})
+	rep, err := store.Sync(a, me(), true, steamHasV2())
 	if err != nil || len(rep.Released) != 1 {
 		t.Fatalf("drop: %+v %v", rep, err)
 	}
@@ -429,7 +549,7 @@ func TestOnlyOneServerDownloadsAnUpdate(t *testing.T) {
 	writeManifest(t, a, v2, v2) // a real update bumps the published time too
 
 	// next boot: the node takes the new version over
-	rep, err = store.Sync(a, me(), true, map[string]bool{"3070290869": true})
+	rep, err = store.Sync(a, me(), true, steamHasV2())
 	if err != nil || len(rep.Absorbed) != 1 || rep.Absorbed[0].Manifest != v2 {
 		t.Fatalf("absorb of the new version: %+v %v", rep, err)
 	}

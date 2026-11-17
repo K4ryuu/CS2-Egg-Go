@@ -47,10 +47,11 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 			users[key] = append(users[key], cont.Name)
 		}
 	}
-	stale, err := t.stale(ctx)
+	latest, err := t.latest(ctx)
 	if err != nil {
 		ui.Warn(w, "could not ask Steam for updates: %v", err)
 	}
+	stale := t.Store.Stale(latest)
 	var total, saved int64
 	rows := make([][]string, 0, len(items))
 	for _, it := range items {
@@ -95,16 +96,12 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 	return nil
 }
 
-// stale asks Steam which stored items moved on.
-func (t *Tools) stale(ctx context.Context) (map[string]bool, error) {
+// latest asks Steam for the current version of every stored item.
+func (t *Tools) latest(ctx context.Context) (map[string]Detail, error) {
 	if t.HTTP == nil {
 		return nil, nil
 	}
-	latest, err := Latest(ctx, t.HTTP, t.Store.IDs())
-	if err != nil {
-		return nil, err
-	}
-	return t.Store.Stale(latest), nil
+	return Latest(ctx, t.HTTP, t.Store.IDs())
 }
 
 // Sync is `cs2node workshop sync [server]`: the same pass the egg asks for
@@ -116,7 +113,7 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 	if err != nil {
 		return err
 	}
-	stale, err := t.stale(ctx)
+	latest, err := t.latest(ctx)
 	if err != nil {
 		ui.Warn(w, "could not ask Steam for updates, outdated items stay linked: %v", err)
 	}
@@ -130,7 +127,7 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 			ui.Warn(w, "%s is running, skipped: stop it first, or let its next boot do this", ui.Bold(ui.ServerID(cont.Name)))
 			continue
 		}
-		rep, err := t.Store.Sync(cont.Volume, cont.Owner, t.Cfg.Seed, stale)
+		rep, err := t.Store.Sync(cont.Volume, cont.Owner, t.Cfg.Seed, latest)
 		if err != nil {
 			ui.Error(w, "%s: %v", cont.Name, err)
 			continue
