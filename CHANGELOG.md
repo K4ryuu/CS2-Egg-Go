@@ -6,11 +6,12 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 
 ### Added
 
-- The workshop cache clears out unused addon versions by itself, every `prune_hours` (24 by default, asked at install, `0` leaves it to `cs2node workshop prune`). A version goes once nothing used it for `keep_days`, now 7 by default instead of 30. With `seed` on that means no running server had it loaded, so addons nobody plays stop being offered and get cleared out too. `cs2node workshop` shows when each was last used.
+- The workshop cache clears out unused addon versions by itself, every `prune_hours` (24 by default, asked at install, `0` leaves it to `cs2node workshop prune`). A version goes once nothing used it for `keep_days`. With `seed` on that means no running server had it loaded, so addons nobody plays stop being offered and get cleared out too. `cs2node workshop` shows when each was last used.
+- SteamRT4 images next to the SteamRT3 (sniper) ones: `stable-rt4` and `beta-rt4`, listed in the egg as **(SteamRT4)**. `stable` and `beta` stay on SteamRT3 until CS2 moves to SteamRT4.
 
 ### Changed
 
-- SteamRT4 images next to the SteamRT3 (sniper) ones: `stable-rt4` and `beta-rt4`, listed in the egg as **(SteamRT4)**. `stable` and `beta` stay on SteamRT3 until CS2 moves to SteamRT4.
+- Workshop `keep_days` defaults to 7 instead of 30. A node that already has it set keeps its value.
 - Go 1.27.4 and every module updated, which also fixes the otel/trace attribute length limit bypass ([#7](https://github.com/K4ryuu/CS2-Egg-Go/pull/7)).
 - The image build takes its Go version from `go.mod`, the same as CI and the release build.
 - Commands the egg types into the server itself (`hostname`, the bot-guard probe and its answer, kicks) stay out of the panel console.
@@ -23,6 +24,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 - Turning on SwiftlyS2 or ModSharp on an older server put it above MetaMod in `gameinfo.gi`, so MetaMod and CounterStrikeSharp stopped loading.
 - The maintenance pass counted `every_hours` from each daemon start, so a node that restarted more often (a self-update, `cs2node install`) never got one. It now counts from the last pass.
 - Workshop `keep_days: 0` removed every unused version instead of keeping them all, and the days counted from when a version was stored instead of from its last use.
+- `cs2node status` and `cs2node doctor` showed an empty map for a crash that came before a map loaded.
 
 ### Note
 
