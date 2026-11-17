@@ -163,7 +163,11 @@ func (m *Module) Doctor(ctx context.Context, c *core.Core) []doctor.Check {
 		}
 		seen[meta.Container] = true
 		if time.Since(meta.Time) < 24*time.Hour {
-			out = append(out, doctor.Warnf(s, fmt.Sprintf("%s crashed %s ago (exit %d, %s): cs2node crash %s", meta.Container, time.Since(meta.Time).Round(time.Minute), meta.ExitCode, meta.Map, meta.Container)))
+			why := fmt.Sprintf("exit %d", meta.ExitCode)
+			if meta.Map != "" {
+				why += ", " + meta.Map
+			}
+			out = append(out, doctor.Warnf(s, fmt.Sprintf("%s crashed %s ago (%s): cs2node crash %s", meta.Container, time.Since(meta.Time).Round(time.Minute), why, meta.Container)))
 		}
 	}
 	return out

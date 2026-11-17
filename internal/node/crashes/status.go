@@ -23,8 +23,11 @@ func (m *Module) PrintStatus(w io.Writer, _ *core.Core, st core.Status) {
 	}
 	for _, cont := range st.Containers {
 		if c, ok := last[cont.Name]; ok {
-			ui.KV(w, ui.ServerID(cont.Name), fmt.Sprintf("last %s, exit %s on %s",
-				ui.Yellow(c.Time.Local().Format("2006-01-02 15:04")), ui.Red(fmt.Sprint(c.ExitCode)), c.Map))
+			line := fmt.Sprintf("last %s, exit %s", ui.Yellow(c.Time.Local().Format("2006-01-02 15:04")), ui.Red(fmt.Sprint(c.ExitCode)))
+			if c.Map != "" {
+				line += " on " + c.Map
+			}
+			ui.KV(w, ui.ServerID(cont.Name), line)
 		}
 	}
 }
