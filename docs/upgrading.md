@@ -10,6 +10,7 @@ Wings pulls the image when a server starts. So a server picks up a new image on 
 |---|---|
 | `:stable` | Stable releases |
 | `:beta` | What is going into the next stable |
+| `:stable-rt4`, `:beta-rt4` | The same on SteamRT4 instead of SteamRT3 (sniper) |
 
 Pinning to a specific version is not offered on purpose: the egg and the daemon speak a versioned protocol, and staying current is how they stay compatible. If you need to hold a server back, hold its addon versions instead with [pins](modules/addon-cache.md#version-locks).
 

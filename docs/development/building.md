@@ -26,11 +26,13 @@ make node VERSION=2.1.0 CHANNEL=beta
 ## The image
 
 ```bash
-./scripts/build.sh dev -g          # build and push the :dev tag to GHCR
+./scripts/build.sh dev -g          # build and push :dev and :dev-rt4 to GHCR
 ./scripts/build.sh 1.0.0           # a version tag
 ```
 
-The Dockerfile is two stages. The first compiles `cs2egg` on the builder's native platform and cross-compiles for linux/amd64. The second flattens the SteamRT runtime into one layer and copies the binary in. No shell scripts, no `jq`, no package manager in the final image.
+Every tag is built twice: `TAG` on SteamRT3 (sniper), the Dockerfile's default `BASE`, and `TAG-rt4` on SteamRT4.
+
+The Dockerfile is two stages. The first compiles `cs2egg` on the builder's native platform and cross-compiles for linux/amd64. The second flattens the SteamRT runtime (`BASE`) into one layer and copies the binary in. No shell scripts, no `jq`, no package manager in the final image.
 
 The base is flattened on purpose: the upstream SteamRT layer stores hardlink targets as absolute paths, and some dockerd versions refuse it on pull with `invalid hardlink target`. Re-exporting the rootfs through BuildKit rewrites them.
 

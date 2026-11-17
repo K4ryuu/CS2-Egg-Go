@@ -4,14 +4,16 @@
         "version": "PTDL_v2",
         "update_url": "https://raw.githubusercontent.com/K4ryuu/CS2-Egg-Go/main/pterodactyl/kitsunelab-cs2-go-egg.json"
     },
-    "exported_at": "2026-09-22T16:51:51+00:00",
+    "exported_at": "2026-11-17T17:15:49+00:00",
     "name": "KitsuneLab CS2 Go @ K4ryuu",
     "author": "k4ryuu@icloud.com",
     "description": "CS2 servers for Pterodactyl and Pelican with no shell in the image: one static Go binary boots the server, and an optional node daemon shares the game files, filters bot floods and caches workshop content. The successor of the bash KitsuneLab CS2 egg.",
     "features": [],
     "docker_images": {
         "KitsuneLab CS2 Go - Stable": "ghcr.io/k4ryuu/cs2-egg-go:stable",
-        "KitsuneLab CS2 Go - Beta": "ghcr.io/k4ryuu/cs2-egg-go:beta"
+        "KitsuneLab CS2 Go - Beta": "ghcr.io/k4ryuu/cs2-egg-go:beta",
+        "KitsuneLab CS2 Go - Stable (SteamRT4)": "ghcr.io/k4ryuu/cs2-egg-go:stable-rt4",
+        "KitsuneLab CS2 Go - Beta (SteamRT4)": "ghcr.io/k4ryuu/cs2-egg-go:beta-rt4"
     },
     "file_denylist": [],
     "startup": "./game/cs2.sh {{CUSTOM_PARAMS}} -dedicated +ip 0.0.0.0 -port {{SERVER_PORT}} +map {{SRCDS_MAP}} -maxplayers {{SRCDS_MAXPLAYERS}} +sv_setsteamaccount {{STEAM_ACC}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}}",

@@ -37,6 +37,8 @@ Startup tab > **Docker Image**:
 | `ghcr.io/k4ryuu/cs2-egg-go:stable` | Production |
 | `ghcr.io/k4ryuu/cs2-egg-go:beta` | Testing what comes next |
 
+Both run on SteamRT3 (sniper), the runtime CS2 ships for. `stable-rt4` and `beta-rt4` are the same images on SteamRT4, listed in the panel as **(SteamRT4)**, for trying the newer runtime before CS2 moves to it.
+
 ## 4. Start it
 
 The console walks through the boot in order:

@@ -1,4 +1,4 @@
-# Dockerfile with SteamRT4
+# Dockerfile for both runtimes: SteamRT3 (sniper) by default, SteamRT4 with BASE set (the -rt4 tags)
 #
 # Stage 1 builds cs2egg, the Go entrypoint, on the builder's native platform and
 # cross-compiles for linux/amd64 (static, no libc).
@@ -9,6 +9,7 @@
 # target"). Re-exporting the rootfs through BuildKit rewrites those links relative, so the
 # base is flattened into one layer of our own before anything is stacked on top. The upstream
 # config carries only the default PATH and cosmetic labels, nothing to carry over.
+ARG         BASE=registry.gitlab.steamos.cloud/steamrt/sniper/platform:latest-container-runtime-depot
 FROM        --platform=$BUILDPLATFORM golang:1.27.4-alpine AS build
 ARG         VERSION=0.0.0-dev
 ARG         CHANNEL=dev
@@ -23,14 +24,14 @@ RUN         CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
               -ldflags "-s -w -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Version=${VERSION} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Channel=${CHANNEL} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Commit=${COMMIT} -X github.com/K4ryuu/CS2-Egg-Go/internal/version.Built=${BUILT}" \
               -o /out/cs2egg ./cmd/cs2egg
 
-FROM        registry.gitlab.steamos.cloud/steamrt/steamrt4/platform:latest-container-runtime-depot AS upstream
+FROM        ${BASE} AS upstream
 
 FROM        scratch
 COPY        --from=upstream / /
 ENV         PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 LABEL       author="K4ryuu @ KitsuneLab" \
             maintainer="k4ryuu@icloud.com" \
-            org.opencontainers.image.description="The SteamRT4 Platform image for Pterodactyl CS2 servers is packed with numerous features, designed to simplify server management and reduce hassle." \
+            org.opencontainers.image.description="The SteamRT Platform image for Pterodactyl CS2 servers is packed with numerous features, designed to simplify server management and reduce hassle." \
             org.opencontainers.image.source="https://github.com/K4ryuu/CS2-Egg-Go"
 
 # Prep OS: no packages on top of the runtime (curl and tar are already in it),

@@ -2,11 +2,11 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
-## [1.2.0] - 2026-11-16
+## [1.2.0] - 2026-11-17
 
 ### Changed
 
-- The image is built on SteamRT4 instead of SteamRT3 (sniper). Nothing changes on the panel side: same image tags, same egg.
+- SteamRT4 images next to the SteamRT3 (sniper) ones: `stable-rt4` and `beta-rt4`, listed in the egg as **(SteamRT4)**. `stable` and `beta` stay on SteamRT3 until CS2 moves to SteamRT4.
 - Go 1.27.4 and every module updated, which also fixes the otel/trace attribute length limit bypass ([#7](https://github.com/K4ryuu/CS2-Egg-Go/pull/7)).
 
 ### Fixed

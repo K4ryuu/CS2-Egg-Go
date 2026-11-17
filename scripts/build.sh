@@ -37,17 +37,17 @@ usage() {
     echo -e "    ./scripts/build.sh [TAG] [options]"
     echo -e ""
     echo -e "${BOLD}Positional:${RESET}"
-    echo -e "    TAG                 Docker tag to use (default: dev)"
+    echo -e "    TAG                 Docker tag to use (default: dev): TAG on SteamRT3, TAG-rt4 on SteamRT4"
     echo -e ""
     echo -e "${BOLD}Options:${RESET}"
     echo -e "    -t, --tag TAG       Explicitly set the tag (overrides positional)"
-    echo -e "    -g, --ghcr          Push the image to GitHub Container Registry (ghcr.io)"
+    echo -e "    -g, --ghcr          Push the images to GitHub Container Registry (ghcr.io)"
     echo -e "    -h, --help          Show this help and exit"
     echo -e ""
     echo -e "${BOLD}Examples:${RESET}"
-    echo -e "    ./scripts/build.sh                    # build :dev"
-    echo -e "    ./scripts/build.sh release            # build :release"
-    echo -e "    ./scripts/build.sh -t 1.2.3 -g        # build :1.2.3 and push to GHCR"
+    echo -e "    ./scripts/build.sh                    # build :dev and :dev-rt4"
+    echo -e "    ./scripts/build.sh release            # build :release and :release-rt4"
+    echo -e "    ./scripts/build.sh -t 1.2.3 -g        # build :1.2.3 and :1.2.3-rt4, push both to GHCR"
 }
 
 # ---------------------------------------------
@@ -90,11 +90,9 @@ fi
 GITHUB_REPO="k4ryuu/cs2-egg-go"
 GHCR_IMAGE="ghcr.io/${GITHUB_REPO}"
 GHCR_FULL="${GHCR_IMAGE}:${TAG}"
+STEAMRT4="registry.gitlab.steamos.cloud/steamrt/steamrt4/platform:latest-container-runtime-depot"
 
-# Primary (and only) build target
-FULL_IMAGE="${GHCR_FULL}"
-
-headline "KitsuneLab CS2 Docker Image Builder" "Image: ${BOLD}${FULL_IMAGE}${RESET}"
+headline "KitsuneLab CS2 Docker Image Builder" "Images: ${BOLD}${GHCR_FULL}${RESET} (SteamRT3), ${BOLD}${GHCR_FULL}-rt4${RESET} (SteamRT4)"
 
 # ---------------------------------------------
 # Pre-flight checks
@@ -236,25 +234,30 @@ cleanup_untagged() {
     return 0
 }
 
-# tags: what was asked to be published, or the hub name for a local build
-TAGS=()
-[[ "$PUBLISH_GHCR" == true ]] && TAGS+=(-t "$GHCR_FULL")
-[[ ${#TAGS[@]} -eq 0 ]]       && TAGS=(-t "$GHCR_FULL")
-TARGETS=$(printf '%s ' "${TAGS[@]}" | sed 's/-t //g')
+# each tag twice: TAG on the Dockerfile's default SteamRT3, TAG-rt4 on SteamRT4
 BUILD_ARGS=(--builder "$BUILDER" --platform "$BUILD_PLATFORM" -f docker/KitsuneLab-Dockerfile
             --build-arg "VERSION=$VERSION" --build-arg "CHANNEL=$CHANNEL" --build-arg "COMMIT=$COMMIT"
-            --build-arg "BUILT=$(date -u +%Y-%m-%dT%H:%MZ)" "${TAGS[@]}")
+            --build-arg "BUILT=$(date -u +%Y-%m-%dT%H:%MZ)")
 
-if [[ "$PUBLISH_GHCR" == true ]]; then
-    run_with_spinner "Building + pushing ${TARGETS}" docker buildx build "${BUILD_ARGS[@]}" --push .
-    [[ "$GHCR_NEW_LOGIN" == true ]] && log_info "Credentials saved to: ${HOME}/.docker/config.json"
-else
-    run_with_spinner "Building ${FULL_IMAGE}" docker buildx build "${BUILD_ARGS[@]}" --load .
-    size=$(docker image inspect "$FULL_IMAGE" -f '{{.Size}}' 2>/dev/null || echo 0)
+for suffix in "" "-rt4"; do
+    image="${GHCR_FULL}${suffix}"
+    args=("${BUILD_ARGS[@]}" -t "$image")
+    if [[ -n "$suffix" ]]; then args+=(--build-arg "BASE=$STEAMRT4"); fi
+    if [[ "$PUBLISH_GHCR" == true ]]; then
+        run_with_spinner "Building + pushing ${image}" docker buildx build "${args[@]}" --push .
+        continue
+    fi
+    run_with_spinner "Building ${image}" docker buildx build "${args[@]}" --load .
+    size=$(docker image inspect "$image" -f '{{.Size}}' 2>/dev/null || echo 0)
     if [[ "$size" =~ ^[0-9]+$ ]] && [ "$size" -gt 0 ]; then
         human_size=$(awk -v s="$size" 'BEGIN{u[1]="B";u[2]="KB";u[3]="MB";u[4]="GB";u[5]="TB";i=1;while(s>1024&&i<5){s/=1024;i++}printf("%.2f %s",s,u[i])}')
-        log_ok "Built ${BOLD}${FULL_IMAGE}${RESET} (${human_size})"
+        log_ok "Built ${BOLD}${image}${RESET} (${human_size})"
     fi
+done
+
+if [[ "$PUBLISH_GHCR" == true ]]; then
+    [[ "$GHCR_NEW_LOGIN" == true ]] && log_info "Credentials saved to: ${HOME}/.docker/config.json"
+else
     section "Next steps"
     echo -e "To publish, rerun with ${BOLD}-g${RESET} (push to GHCR):"
     echo -e "  ${BOLD}./scripts/build.sh ${TAG} -g${RESET}"
