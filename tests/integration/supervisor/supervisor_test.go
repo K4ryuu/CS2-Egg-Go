@@ -111,6 +111,11 @@ func TestSendInjectsACommandAndCancelStopsTheServer(t *testing.T) {
 	if !strings.Contains(joined, "cmd:kickid 7") || !strings.Contains(joined, "cmd:quit") {
 		t.Fatalf("lines: %q", joined)
 	}
+	for _, l := range lines {
+		if l == "kickid 7" || l == "quit" {
+			t.Fatalf("the egg's own command echoed to the console: %q", joined)
+		}
+	}
 	if err := s.Send("late"); err == nil {
 		t.Fatal("Send after exit must fail")
 	}

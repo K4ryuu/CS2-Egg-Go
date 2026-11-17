@@ -199,7 +199,9 @@ func (g *Guard) inspect(line string) bool {
 		g.swept = now
 		g.sweep(now)
 	}
-	g.selftest(line, now)
+	if g.selftest(line, now) {
+		return false // our probe's answer
+	}
 
 	// everything below reads what the engine wrote, with its channel tag
 	// stepped over, so no pattern can be satisfied by a player's name
@@ -528,20 +530,21 @@ func (g *Guard) mutedLine(line string) bool {
 
 // selftest proves the command channel once the engine is live: the probe
 // must come back as its own exact line, the echoed input does not count.
-func (g *Guard) selftest(line string, now time.Time) {
+// It reports whether the line was that answer.
+func (g *Guard) selftest(line string, now time.Time) bool {
 	if line == "BOTGUARD_CHANNEL_OK" {
 		if !g.channelOK {
 			g.Log.Log(logx.Success, "Bot-guard command channel verified: kick/block enforcement is live")
 		}
 		g.channelOK = true
-		return
+		return true
 	}
 	if g.probeSent.IsZero() {
 		if strings.Contains(line, "Host activate") || strings.Contains(line, "hibernating") || strings.Contains(line, "Accepting Steam Net connection") {
 			g.probeSent = now
 			g.send("echo BOTGUARD_CHANNEL_OK")
 		}
-		return
+		return false
 	}
 	if !g.channelOK && !g.channelWarn && g.Action != "log" && now.Sub(g.probeSent) > 20*time.Second {
 		g.channelWarn = true
@@ -549,6 +552,7 @@ func (g *Guard) selftest(line string, now time.Time) {
 			"Detections are still logged, but kick/addip could be silently dropped",
 			"Check that the server reads console input")
 	}
+	return false
 }
 
 // HostNotice handles a block the node made for this server.

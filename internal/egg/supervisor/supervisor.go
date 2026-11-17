@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -27,7 +28,8 @@ type Server struct {
 	Cmd   *exec.Cmd
 	Stdin *os.File // the panel's console; nil = none
 	// OnInput sees each line the operator types in the panel, before it
-	// reaches the server. Commands the egg injects itself do not go here.
+	// reaches the server. Commands the egg injects itself do not go here,
+	// and their echo never reaches Line either.
 	OnInput func(cmd string)
 	Line    func(string) // every output line, in order, without the newline
 	// StopCommand is written when ctx is cancelled; the process gets Grace
@@ -43,6 +45,31 @@ type Server struct {
 	ptmx     *os.File
 	stopping atomic.Bool
 	partial  []byte // stdin bytes since the last newline, to spot a typed "quit"
+
+	echoMu sync.Mutex
+	sent   []sentCmd // what Send wrote, until its echo comes back
+}
+
+type sentCmd struct {
+	cmd string
+	at  time.Time
+}
+
+// ownEcho drops the pty's echo of a command Send wrote, the egg's own
+// commands are no business of the panel console.
+func (s *Server) ownEcho(line string) bool {
+	s.echoMu.Lock()
+	defer s.echoMu.Unlock()
+	for len(s.sent) > 0 && time.Since(s.sent[0].at) > 5*time.Second {
+		s.sent = s.sent[1:]
+	}
+	for i, c := range s.sent {
+		if c.cmd == line {
+			s.sent = slices.Delete(s.sent, i, i+1)
+			return true
+		}
+	}
+	return false
 }
 
 // Stopping reports whether a stop was asked for: the panel typed quit (or
@@ -79,6 +106,9 @@ func (s *Server) Send(cmd string) error {
 	}
 	cmd = strings.TrimRight(cmd, "\r\n")
 	s.noteInput([]byte(cmd+"\n"), false)
+	s.echoMu.Lock()
+	s.sent = append(s.sent, sentCmd{cmd, time.Now()})
+	s.echoMu.Unlock()
 	_, err := io.WriteString(s.ptmx, cmd+"\n")
 	return err
 }
@@ -140,7 +170,9 @@ func (s *Server) Run(ctx context.Context) error {
 		sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 		for sc.Scan() && !ended.Load() {
 			lastOut.Store(time.Now().UnixNano())
-			s.Line(strings.TrimRight(sc.Text(), "\r"))
+			if line := strings.TrimRight(sc.Text(), "\r"); !s.ownEcho(line) {
+				s.Line(line)
+			}
 		}
 	}()
 

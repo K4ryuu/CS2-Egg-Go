@@ -333,7 +333,9 @@ func TestSelfTestProbeAndWarning(t *testing.T) {
 	if h.g.ChannelVerified() {
 		t.Fatal("echoed input must not verify")
 	}
-	h.feed("BOTGUARD_CHANNEL_OK")
+	if h.g.Inspect("BOTGUARD_CHANNEL_OK") {
+		t.Fatal("the probe answer must stay off the panel")
+	}
 	if !h.g.ChannelVerified() {
 		t.Fatal("marker must verify")
 	}
