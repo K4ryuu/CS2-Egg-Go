@@ -65,7 +65,7 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 		switch {
 		case stale[it.ID]:
 			state = ui.Yellow("update out")
-		case len(who) == 0:
+		case len(who) == 0 || t.Cfg.Seed && t.Store.idle(it.ID, it.Manifest, time.Now()):
 			state = ui.Gray("unused")
 		}
 		if n := len(who); n > 0 {
@@ -77,10 +77,11 @@ func (t *Tools) List(ctx context.Context, conts []core.Container) error {
 			time.Unix(it.Updated, 0).Format("2006-01-02"),
 			ui.Size(it.Bytes),
 			strconv.Itoa(len(who)),
+			ui.Ago(it.Used),
 			state,
 		})
 	}
-	ui.Table(w, []string{"item", "version", "published", "size", "servers", ""}, rows)
+	ui.Table(w, []string{"item", "version", "published", "size", "servers", "last used", ""}, rows)
 	fmt.Fprintln(w)
 	ui.KV(w, "store", t.Cfg.Dir)
 	ui.KV(w, "on disk", ui.Size(total))

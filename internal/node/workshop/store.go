@@ -42,6 +42,7 @@ type Item struct {
 	Files    []string  `json:"files"`    // names inside the version dir
 	Bytes    int64     `json:"-"`        // what those files weigh right now
 	Stored   time.Time `json:"-"`        // when the node took this version over
+	Used     time.Time `json:"-"`        // the version dir's clock, its last use
 }
 
 // Shared lists the files servers link to (everything but the small
@@ -153,6 +154,9 @@ func (s Store) read(id, manifest string) (Item, error) {
 	}
 	if st, err := os.Stat(filepath.Join(dir, "meta.json")); err == nil {
 		it.Stored = st.ModTime()
+	}
+	if st, err := os.Stat(dir); err == nil {
+		it.Used = st.ModTime()
 	}
 	for _, f := range it.Files {
 		st, err := os.Stat(filepath.Join(dir, f))

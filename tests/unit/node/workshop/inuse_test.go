@@ -3,8 +3,11 @@
 package workshop_test
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,5 +127,22 @@ func TestPruneWithSeedGoesByUseNotLinks(t *testing.T) {
 	store, vol = stored(t, 8)
 	if n, _ := store.Prune(nil, []core.Container{{Volume: vol}}, true, time.Now()); n != 1 {
 		t.Fatal("only a stopped server links it and nobody used it")
+	}
+}
+
+func TestListShowsLastUse(t *testing.T) {
+	for _, tc := range []struct {
+		days int
+		want string
+	}{{3, "3d ago"}, {10, "unused"}} {
+		store, vol := stored(t, tc.days)
+		var out bytes.Buffer
+		tools := &workshop.Tools{Cfg: workshop.Config{Seed: true, KeepDays: 7}, Store: store, Out: &out}
+		if err := tools.List(context.Background(), []core.Container{{Name: "srv", Volume: vol}}); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out.String(), tc.want) {
+			t.Fatalf("%d days: want %q in\n%s", tc.days, tc.want, out.String())
+		}
 	}
 }

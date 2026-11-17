@@ -56,7 +56,7 @@ With `seed` off a link is use, and a server stopped in the panel still counts: i
 ## Commands
 
 ```bash
-sudo cs2node workshop                # cached items: size, version, how many servers share each
+sudo cs2node workshop                # cached items: size, version, how many servers share each, last use
 sudo cs2node workshop sync           # run the pass for every stopped server
 sudo cs2node workshop sync <server>  # one server
 sudo cs2node workshop prune          # drop versions nothing used lately
