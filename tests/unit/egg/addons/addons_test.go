@@ -426,6 +426,52 @@ func TestMetamodFirstMovesAboveAddonAddedOverBackups(t *testing.T) {
 	}
 }
 
+// every order of turning addons on, one per boot, fresh and old gameinfo
+func TestMetamodStaysFirstInAnyEnableOrder(t *testing.T) {
+	old := strings.Replace(gameinfo, "override\n", "override\n\t\t\tGame\tcsgo/backups\n", 1)
+	all := []string{"csgo/addons/metamod", "csgo/addons/swiftlys2", "sharp"}
+	for _, base := range []string{gameinfo, old} {
+		want := []string{"csgo/addons/metamod"}
+		if base == old {
+			want = []string{"csgo/backups", "csgo/addons/metamod"}
+		}
+		for _, order := range [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}} {
+			p := filepath.Join(t.TempDir(), "gameinfo.gi")
+			os.WriteFile(p, []byte(base), 0o644)
+			gi := addons.Gameinfo{Path: p}
+			on := map[string]bool{}
+			for _, next := range order {
+				on[all[next]] = true
+				// same as UpdateAll: fixed add order, then the reorder
+				for _, a := range all {
+					if on[a] {
+						gi.Add(a)
+					}
+				}
+				if _, err := gi.MetamodFirst(); err != nil {
+					t.Fatal(err)
+				}
+				if !on[all[0]] {
+					continue
+				}
+				if changed, _ := gi.MetamodFirst(); changed {
+					t.Fatalf("order %v, on %v: second reorder must be a no-op", order, on)
+				}
+				data, _ := os.ReadFile(p)
+				lines := strings.Split(string(data), "\n")
+				for i, w := range want {
+					if !strings.HasSuffix(lines[7+i], w) {
+						t.Fatalf("order %v, on %v: %q", order, on, lines[6:11])
+					}
+				}
+				if strings.Count(string(data), "csgo/addons/metamod") != 1 {
+					t.Fatalf("order %v: metamod duplicated: %s", order, data)
+				}
+			}
+		}
+	}
+}
+
 func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
