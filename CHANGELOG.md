@@ -14,6 +14,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 - Go 1.27.4 and every module updated, which also fixes the otel/trace attribute length limit bypass ([#7](https://github.com/K4ryuu/CS2-Egg-Go/pull/7)).
 - The image build takes its Go version from `go.mod`, the same as CI and the release build.
 - Commands the egg types into the server itself (`hostname`, the bot-guard probe and its answer, kicks) stay out of the panel console.
+- ModSharp gets the .NET runtime its own build names, so a move to .NET 11 needs no egg update. The runtime comes from `builds.dotnet.microsoft.com`, Microsoft is retiring the old `azureedge` address.
 
 ### Fixed
 

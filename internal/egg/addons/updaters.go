@@ -25,7 +25,7 @@ const DotNetVersion = "10.0.0"
 var reDotNet = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // DotNetURL is overridden by tests.
-var DotNetURL = "https://dotnetcli.azureedge.net/dotnet/Runtime/%s/dotnet-runtime-%s-linux-x64.tar.gz"
+var DotNetURL = "https://builds.dotnet.microsoft.com/dotnet/Runtime/%s/dotnet-runtime-%s-linux-x64.tar.gz"
 
 // Env is everything an updater needs.
 type Env struct {
