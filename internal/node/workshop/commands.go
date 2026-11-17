@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -157,19 +158,35 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 func (t *Tools) Prune(conts []core.Container) error {
 	w := t.Out
 	ui.Section(w, "cs2node workshop prune")
-	used := map[string]bool{}
-	for _, cont := range conts {
-		for key := range Used(t.Store, cont.Volume) {
-			used[key] = true
-		}
-	}
-	n, freed := t.Store.Prune(used, t.Cfg.KeepDays, time.Now())
+	n, freed := t.Store.Prune(conts, t.Cfg.KeepDays, time.Now())
 	switch {
+	case t.Cfg.KeepDays == 0:
+		ui.Info(w, "keep_days is 0, every stored version is kept")
 	case n == 0:
-		ui.Info(w, "Nothing to remove: every stored version is either in use or younger than %d day(s)", t.Cfg.KeepDays)
+		ui.Info(w, "Nothing to remove: every stored version is in use or was within the last %d day(s)", t.Cfg.KeepDays)
 	default:
 		ui.Ok(w, "Removed %d unused version(s), %s freed on the node", n, ui.Size(freed))
 	}
 	fmt.Fprintln(w)
 	return nil
+}
+
+// StoppedVolumes finds server volumes with no running container, so their
+// maps can still be shared and their links still count.
+func StoppedVolumes(running map[string]bool) []core.Container {
+	var out []core.Container
+	for _, dir := range core.VolumeDirs {
+		entries, _ := os.ReadDir(dir)
+		for _, e := range entries {
+			if !e.IsDir() || running[e.Name()] {
+				continue
+			}
+			path := dir + "/" + e.Name()
+			if _, err := os.Stat(path + "/" + VolWorkshop); err != nil {
+				continue // never had workshop content
+			}
+			out = append(out, core.Container{Name: e.Name(), Volume: path, Owner: core.VolumeOwner(path)})
+		}
+	}
+	return out
 }

@@ -49,7 +49,7 @@ Then exactly one server does the downloading:
 2. On its next boot the node takes the new version over, stored beside the old one.
 3. Every other server stops being out of date the moment the store has the new version. They are relinked to it on their next boot, bookkeeping and all, and download nothing.
 
-The old version stays until no server links to it, then `keep_days` and `cs2node workshop prune` clear it.
+The old version stays until no server links to it. Once nothing has linked it for `keep_days`, the node removes it on its next prune, every `prune_hours`, or `cs2node workshop prune` does it by hand. A server stopped in the panel still counts: its volume is read too.
 
 ## Commands
 

@@ -32,11 +32,16 @@ type Config struct {
 	Seed         bool `json:"seed"`
 	KeepDays     int  `json:"keep_days"`     // versions nothing links to any more
 	CheckMinutes int  `json:"check_minutes"` // how often Steam is asked what is current
+	PruneHours   int  `json:"prune_hours"`   // 0 = only by hand
 }
+
+// PruneDelay holds the first prune back until the core has listed the
+// running servers.
+var PruneDelay = time.Minute
 
 // Defaults is what the wizard offers.
 func Defaults() Config {
-	return Config{Enabled: true, Dir: "/srv/cs2-workshop", Mount: "/tmp/cs2-workshop", Seed: true, KeepDays: 30, CheckMinutes: 360}
+	return Config{Enabled: true, Dir: "/srv/cs2-workshop", Mount: "/tmp/cs2-workshop", Seed: true, KeepDays: 30, CheckMinutes: 360, PruneHours: 24}
 }
 
 // Check rejects what the daemon cannot run with.
@@ -50,6 +55,8 @@ func (c Config) Check() error {
 		return errors.New("keep_days cannot be negative")
 	case c.CheckMinutes < 5:
 		return errors.New("check_minutes must be at least 5")
+	case c.PruneHours < 0:
+		return errors.New("prune_hours cannot be negative")
 	}
 	return nil
 }
@@ -59,9 +66,10 @@ type Module struct {
 	Log  *slog.Logger
 	HTTP *http.Client
 
-	cfg   Config
-	store Store
-	mu    sync.Mutex
+	cfg     Config
+	store   Store
+	mu      sync.Mutex
+	storeMu sync.RWMutex // syncs share the store, a prune takes it alone
 	// upstream is what Steam last said is current, per item. Staleness is
 	// decided against the store when a server asks, so the first server to
 	// fetch an update spares every other one the download.
@@ -90,6 +98,8 @@ func (m *Module) Questions() []module.Question {
 		{Key: "seed", Prompt: "Offer every cached addon to every server", Default: "true", Kind: module.Bool,
 			Help: "an addon one server downloaded costs the next one nothing; turn it off to leave each server with only what it fetched itself"},
 		{Key: "keep_days", Prompt: "Days to keep an addon version nothing uses", Default: strconv.Itoa(d.KeepDays), Kind: module.Int, Help: "0 = keep forever"},
+		{Key: "prune_hours", Prompt: "Hours between clearing out addon versions nothing uses", Default: strconv.Itoa(d.PruneHours), Kind: module.Int,
+			Help: "a server stopped in the panel still counts as using its addons; 0 = only by hand, with cs2node workshop prune"},
 		{Key: "check_minutes", Prompt: "Minutes between workshop update checks", Default: strconv.Itoa(d.CheckMinutes), Kind: module.Int},
 	}
 }
@@ -139,6 +149,9 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 		}()
 	})
 	go m.updateLoop(ctx)
+	if m.cfg.PruneHours > 0 {
+		go m.pruneLoop(ctx, c)
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -181,7 +194,9 @@ func (m *Module) sync(ctx context.Context, c *core.Core, container string) {
 	m.checkUpdates(fresh, time.Minute)
 	m.checkNew(fresh, cont.Volume)
 	cancel()
+	m.storeMu.RLock()
 	rep, err := m.store.Sync(cont.Volume, cont.Owner, m.cfg.Seed, m.upstreamNow())
+	m.storeMu.RUnlock()
 	if err != nil {
 		reply.Err = err.Error()
 		m.Log.Warn("workshop sync failed", "container", container, "err", err)
@@ -215,6 +230,32 @@ func (m *Module) updateLoop(ctx context.Context) {
 			return
 		case <-t.C:
 		}
+	}
+}
+
+// pruneLoop clears what no server linked for keep_days: once after start,
+// then every prune_hours. Stopped servers count, their volumes are read too.
+func (m *Module) pruneLoop(ctx context.Context, c *core.Core) {
+	t := time.NewTimer(PruneDelay)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		conts := c.Containers()
+		running := map[string]bool{}
+		for _, cont := range conts {
+			running[cont.Name] = true
+		}
+		m.storeMu.Lock()
+		n, freed := m.store.Prune(append(conts, StoppedVolumes(running)...), m.cfg.KeepDays, time.Now())
+		m.storeMu.Unlock()
+		if n > 0 {
+			m.Log.Info("workshop pruned", "versions", n, "freed_mib", freed>>20)
+		}
+		t.Reset(time.Duration(m.cfg.PruneHours) * time.Hour)
 	}
 }
 

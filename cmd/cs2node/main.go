@@ -339,6 +339,3 @@ func runDoctor(log *slog.Logger) int {
 	}
 	return doctor.Print(os.Stdout, title, checks)
 }
-
-// VolumeDirs is where Wings and Pelican keep server volumes by default.
-var VolumeDirs = []string{"/var/lib/pterodactyl/volumes", "/var/lib/pelican/volumes"}

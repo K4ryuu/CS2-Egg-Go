@@ -4,6 +4,10 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 
 ## [1.2.0] - 2026-11-17
 
+### Added
+
+- The workshop cache clears out unused addon versions by itself, every `prune_hours` (24 by default, asked at install, `0` leaves it to `cs2node workshop prune`). A version goes once no server, running or stopped, has linked it for `keep_days`.
+
 ### Changed
 
 - SteamRT4 images next to the SteamRT3 (sniper) ones: `stable-rt4` and `beta-rt4`, listed in the egg as **(SteamRT4)**. `stable` and `beta` stay on SteamRT3 until CS2 moves to SteamRT4.
@@ -16,6 +20,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 - Addons and the node stayed on a beta after a stable release came out. With `PRERELEASE` off, or the node on the stable channel, an installed beta now goes back to the latest stable. This fix was sent for the bash egg and got forgotten (thanks @shmitzas, [K4ryuu/CS2-Egg#53](https://github.com/K4ryuu/CS2-Egg/pull/53)).
 - Turning on SwiftlyS2 or ModSharp on an older server put it above MetaMod in `gameinfo.gi`, so MetaMod and CounterStrikeSharp stopped loading.
 - The maintenance pass counted `every_hours` from each daemon start, so a node that restarted more often (a self-update, `cs2node install`) never got one. It now counts from the last pass.
+- Workshop `keep_days: 0` removed every unused version instead of keeping them all, and the days counted from when a version was stored instead of from its last use.
 
 ### Note
 

@@ -182,3 +182,58 @@ func TestBootSyncAsksSteamAboutNewItems(t *testing.T) {
 	}
 	assertNotInstalled(t, vol)
 }
+
+// a stopped server has no container, the daemon must still see its links
+func TestDaemonPruneKeepsWhatAStoppedServerLinks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"response":{"publishedfiledetails":[]}}`))
+	}))
+	defer srv.Close()
+	vols := t.TempDir()
+	stopped := filepath.Join(vols, "stopped")
+	if err := os.CopyFS(stopped, os.DirFS(volume(t, realACF))); err != nil {
+		t.Fatal(err)
+	}
+	deleted := volume(t, realACF)
+	writeManifest(t, deleted, v2, v2)
+	dir := t.TempDir()
+	store := workshop.Store{Dir: dir, Mount: "/tmp/cs2-workshop"}
+	for _, v := range []string{stopped, deleted} {
+		if _, err := store.Sync(v, me(), false, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.RemoveAll(deleted) // its server is gone, nothing links v2 now
+	old := time.Now().Add(-60 * 24 * time.Hour)
+	for _, m := range []string{v1, v2} {
+		if err := os.Chtimes(filepath.Join(dir, workshop.AppID, "3070290869", m), old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldURL, oldDirs, oldDelay := workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay
+	workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay = srv.URL, []string{vols}, 0
+	defer func() { workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay = oldURL, oldDirs, oldDelay }()
+
+	cfg := nodeconfig.Default()
+	wcfg := workshop.Defaults()
+	wcfg.Dir = dir
+	cfg.SetSection("workshop", wcfg)
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	c := core.New(&fakeDocker{}, cfg, []string{"workshop"}, log)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go c.Run(ctx)
+	go workshop.New(log, srv.Client()).Run(ctx, c)
+	gone := filepath.Join(dir, workshop.AppID, "3070290869", v2)
+	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		if _, err := os.Stat(gone); errors.Is(err, os.ErrNotExist) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the unused version was never pruned")
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, workshop.AppID, "3070290869", v1)); err != nil {
+		t.Fatalf("the version a stopped server links went too: %v", err)
+	}
+}

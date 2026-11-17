@@ -498,19 +498,26 @@ func (s Store) IDs() []string {
 	return ids
 }
 
-// Prune drops stored versions nothing points at any more, older than
-// keepDays. used holds "<id>/<manifest>" keys volumes still link to.
-func (s Store) Prune(used map[string]bool, keepDays int, now time.Time) (removed int, freed int64) {
+// Prune drops stored versions none of the given volumes has linked for
+// keepDays (0 keeps everything). A linked version's clock restarts on every
+// pass, so the days count from its last use.
+func (s Store) Prune(conts []core.Container, keepDays int, now time.Time) (removed int, freed int64) {
+	if keepDays <= 0 {
+		return 0, 0
+	}
+	used := map[string]bool{}
+	for _, cont := range conts {
+		maps.Copy(used, Used(s, cont.Volume))
+	}
 	for _, it := range s.Items() {
+		dir := s.versionDir(it.ID, it.Manifest)
 		if used[it.ID+"/"+it.Manifest] {
+			os.Chtimes(dir, now, now) // last seen in use
 			continue
 		}
-		dir := s.versionDir(it.ID, it.Manifest)
-		if keepDays > 0 {
-			st, err := os.Stat(dir)
-			if err != nil || now.Sub(st.ModTime()) < time.Duration(keepDays)*24*time.Hour {
-				continue
-			}
+		st, err := os.Stat(dir)
+		if err != nil || now.Sub(st.ModTime()) < time.Duration(keepDays)*24*time.Hour {
+			continue
 		}
 		if os.RemoveAll(dir) == nil {
 			removed++

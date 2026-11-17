@@ -205,6 +205,9 @@ func hostPorts(pm network.PortMap) []uint16 {
 	return out
 }
 
+// VolumeDirs is where Wings and Pelican keep server volumes by default.
+var VolumeDirs = []string{"/var/lib/pterodactyl/volumes", "/var/lib/pelican/volumes"}
+
 // VolumeOwner is the uid:gid of a volume root (zero when unreadable).
 func VolumeOwner(path string) Owner { return volumeOwner(path) }
 

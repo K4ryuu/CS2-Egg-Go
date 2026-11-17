@@ -222,7 +222,7 @@ func runWorkshopCommand(log *slog.Logger, args []string) error {
 	for _, cont := range conts {
 		running[cont.Name] = true
 	}
-	conts = append(conts, stoppedVolumes(running)...)
+	conts = append(conts, workshop.StoppedVolumes(running)...)
 	t := workshop.NewTools(wcfg, os.Stdout, &http.Client{Timeout: 30 * time.Second})
 	switch {
 	case len(args) == 0:
@@ -237,26 +237,6 @@ func runWorkshopCommand(log *slog.Logger, args []string) error {
 		return t.Prune(conts)
 	}
 	return errors.New("usage: cs2node workshop [sync [server] | prune]")
-}
-
-// stoppedVolumes finds server volumes with no running container, so their
-// maps can still be shared.
-func stoppedVolumes(running map[string]bool) []core.Container {
-	var out []core.Container
-	for _, dir := range VolumeDirs {
-		entries, _ := os.ReadDir(dir)
-		for _, e := range entries {
-			if !e.IsDir() || running[e.Name()] {
-				continue
-			}
-			path := dir + "/" + e.Name()
-			if _, err := os.Stat(path + "/" + workshop.VolWorkshop); err != nil {
-				continue // never had workshop content
-			}
-			out = append(out, core.Container{Name: e.Name(), Volume: path, Owner: core.VolumeOwner(path)})
-		}
-	}
-	return out
 }
 
 // runBackupCommand: listing reads disk; backup now and restore run a
@@ -322,7 +302,7 @@ func runBackupCommand(log *slog.Logger, cmd string, args []string) error {
 			if *volume != "" {
 				return *volume, core.VolumeOwner(*volume), true
 			}
-			for _, d := range VolumeDirs {
+			for _, d := range core.VolumeDirs {
 				p := d + "/" + name
 				if st, err := os.Stat(p); err == nil && st.IsDir() {
 					return p, core.VolumeOwner(p), true

@@ -480,18 +480,22 @@ func TestPruneKeepsWhatIsLinked(t *testing.T) {
 	if _, err := store.Sync(vol, me(), true, nil); err != nil {
 		t.Fatal(err)
 	}
-	used := workshop.Used(store, vol)
-	if !used["3070290869/4513804927223833942"] {
+	if used := workshop.Used(store, vol); !used["3070290869/4513804927223833942"] {
 		t.Fatalf("used: %v", used)
 	}
-	if n, _ := store.Prune(used, 0, time.Now()); n != 0 {
+	now := time.Now()
+	if n, _ := store.Prune([]core.Container{{Volume: vol}}, 1, now.Add(48*time.Hour)); n != 0 {
 		t.Fatal("a linked version must survive")
 	}
-	if n, freed := store.Prune(map[string]bool{}, 0, time.Now()); n != 1 || freed != 4096 {
-		t.Fatalf("an unused version should go: %d %d", n, freed)
+	// keep_days counts from the last time it was linked, not from when it was stored
+	if n, _ := store.Prune(nil, 1, now.Add(60*time.Hour)); n != 0 {
+		t.Fatal("unused for half a day, removed with keep_days 1")
 	}
-	if n, _ := store.Prune(map[string]bool{}, 30, time.Now()); n != 0 {
-		t.Fatal("nothing left to remove")
+	if n, _ := store.Prune(nil, 0, now.Add(1000*24*time.Hour)); n != 0 {
+		t.Fatal("keep_days 0 must keep everything")
+	}
+	if n, freed := store.Prune(nil, 1, now.Add(80*time.Hour)); n != 1 || freed != 4096 {
+		t.Fatalf("an unused version should go: %d %d", n, freed)
 	}
 }
 
@@ -535,6 +539,7 @@ func TestConfigCheck(t *testing.T) {
 		{Dir: "/srv/x", Mount: "relative", CheckMinutes: 60},
 		{Dir: "/srv/x", Mount: "/tmp/x", CheckMinutes: 1},
 		{Dir: "/srv/x", Mount: "/tmp/x", CheckMinutes: 60, KeepDays: -1},
+		{Dir: "/srv/x", Mount: "/tmp/x", CheckMinutes: 60, PruneHours: -1},
 	} {
 		if err := bad.Check(); err == nil {
 			t.Fatalf("accepted: %+v", bad)
@@ -615,7 +620,7 @@ func TestOnlyOneServerDownloadsAnUpdate(t *testing.T) {
 	if used["3070290869/"+v1] {
 		t.Fatal("nothing should link the old version any more")
 	}
-	if n, _ := store.Prune(used, 0, time.Now()); n != 1 {
+	if n, _ := store.Prune([]core.Container{{Volume: a}, {Volume: b}}, 1, time.Now().Add(48*time.Hour)); n != 1 {
 		t.Fatalf("the old version should be prunable: %d", n)
 	}
 }
