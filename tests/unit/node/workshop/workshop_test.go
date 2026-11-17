@@ -475,7 +475,7 @@ func TestLatestSkipsGoneItems(t *testing.T) {
 }
 
 func TestPruneKeepsWhatIsLinked(t *testing.T) {
-	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop"}
+	store := workshop.Store{Dir: t.TempDir(), Mount: "/tmp/cs2-workshop", KeepDays: 1}
 	vol := volume(t, realACF)
 	if _, err := store.Sync(vol, me(), true, nil); err != nil {
 		t.Fatal(err)
@@ -484,17 +484,19 @@ func TestPruneKeepsWhatIsLinked(t *testing.T) {
 		t.Fatalf("used: %v", used)
 	}
 	now := time.Now()
-	if n, _ := store.Prune([]core.Container{{Volume: vol}}, 1, now.Add(48*time.Hour)); n != 0 {
+	if n, _ := store.Prune([]core.Container{{Volume: vol}}, nil, false, now.Add(48*time.Hour)); n != 0 {
 		t.Fatal("a linked version must survive")
 	}
 	// keep_days counts from the last time it was linked, not from when it was stored
-	if n, _ := store.Prune(nil, 1, now.Add(60*time.Hour)); n != 0 {
+	if n, _ := store.Prune(nil, nil, false, now.Add(60*time.Hour)); n != 0 {
 		t.Fatal("unused for half a day, removed with keep_days 1")
 	}
-	if n, _ := store.Prune(nil, 0, now.Add(1000*24*time.Hour)); n != 0 {
+	keepAll := store
+	keepAll.KeepDays = 0
+	if n, _ := keepAll.Prune(nil, nil, false, now.Add(1000*24*time.Hour)); n != 0 {
 		t.Fatal("keep_days 0 must keep everything")
 	}
-	if n, freed := store.Prune(nil, 1, now.Add(80*time.Hour)); n != 1 || freed != 4096 {
+	if n, freed := store.Prune(nil, nil, false, now.Add(80*time.Hour)); n != 1 || freed != 4096 {
 		t.Fatalf("an unused version should go: %d %d", n, freed)
 	}
 }
@@ -620,7 +622,8 @@ func TestOnlyOneServerDownloadsAnUpdate(t *testing.T) {
 	if used["3070290869/"+v1] {
 		t.Fatal("nothing should link the old version any more")
 	}
-	if n, _ := store.Prune([]core.Container{{Volume: a}, {Volume: b}}, 1, time.Now().Add(48*time.Hour)); n != 1 {
+	store.KeepDays = 1
+	if n, _ := store.Prune([]core.Container{{Volume: a}, {Volume: b}}, nil, false, time.Now().Add(48*time.Hour)); n != 1 {
 		t.Fatalf("the old version should be prunable: %d", n)
 	}
 }

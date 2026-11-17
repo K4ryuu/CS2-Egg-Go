@@ -49,7 +49,9 @@ Then exactly one server does the downloading:
 2. On its next boot the node takes the new version over, stored beside the old one.
 3. Every other server stops being out of date the moment the store has the new version. They are relinked to it on their next boot, bookkeeping and all, and download nothing.
 
-The old version stays until no server links to it. Once nothing has linked it for `keep_days`, the node removes it on its next prune, every `prune_hours`, or `cs2node workshop prune` does it by hand. A server stopped in the panel still counts: its volume is read too.
+The old version stays while a server uses it. Once nothing has used it for `keep_days`, the node removes it on its next prune, every `prune_hours`, or `cs2node workshop prune` does it by hand.
+
+With `seed` off a link is use, and a server stopped in the panel still counts: its volume is read too. With `seed` on every server links everything, so the node looks every minute at what running servers have open instead. An addon none of them loaded for `keep_days` is no longer offered, the next boot lets go of it and the prune removes it. A server that wants it again downloads it, and the cache takes it back.
 
 ## Commands
 
@@ -57,7 +59,7 @@ The old version stays until no server links to it. Once nothing has linked it fo
 sudo cs2node workshop                # cached items: size, version, how many servers share each
 sudo cs2node workshop sync           # run the pass for every stopped server
 sudo cs2node workshop sync <server>  # one server
-sudo cs2node workshop prune          # drop versions nothing links to
+sudo cs2node workshop prune          # drop versions nothing used lately
 ```
 
 `sync` refuses a running server: its engine holds the files open, so the swap waits for the next boot.

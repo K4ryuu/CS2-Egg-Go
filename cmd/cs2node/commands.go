@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -218,11 +219,12 @@ func runWorkshopCommand(log *slog.Logger, args []string) error {
 	// a passive core only sees running containers, so everything it lists
 	// is running; stopped ones come from the volume dirs
 	running := map[string]bool{}
-	conts := c.Containers()
-	for _, cont := range conts {
+	live := c.Containers()
+	for _, cont := range live {
 		running[cont.Name] = true
 	}
-	conts = append(conts, workshop.StoppedVolumes(running)...)
+	stopped := workshop.StoppedVolumes(running)
+	conts := slices.Concat(live, stopped)
 	t := workshop.NewTools(wcfg, os.Stdout, &http.Client{Timeout: 30 * time.Second})
 	switch {
 	case len(args) == 0:
@@ -234,7 +236,7 @@ func runWorkshopCommand(log *slog.Logger, args []string) error {
 		}
 		return t.Sync(ctx, conts, running, only)
 	case args[0] == "prune":
-		return t.Prune(conts)
+		return t.Prune(live, stopped)
 	}
 	return errors.New("usage: cs2node workshop [sync [server] | prune]")
 }

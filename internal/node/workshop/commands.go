@@ -28,7 +28,7 @@ type Tools struct {
 
 // NewTools builds the command surface from a loaded config.
 func NewTools(cfg Config, out io.Writer, client *http.Client) *Tools {
-	return &Tools{Cfg: cfg, Store: Store{Dir: cfg.Dir, Mount: cfg.Mount}, Out: out, HTTP: client}
+	return &Tools{Cfg: cfg, Store: Store{Dir: cfg.Dir, Mount: cfg.Mount, KeepDays: cfg.KeepDays}, Out: out, HTTP: client}
 }
 
 // List is `cs2node workshop`: every cached item, its size, and which
@@ -144,7 +144,7 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 			ui.Error(w, "%s: %v", cont.Name, err)
 			continue
 		}
-		ui.Ok(w, "%s: %d absorbed, %d linked, %d seeded, %d dropped for update, %s freed", ui.Bold(ui.ServerID(cont.Name)),
+		ui.Ok(w, "%s: %d absorbed, %d linked, %d seeded, %d dropped, %s freed", ui.Bold(ui.ServerID(cont.Name)),
 			len(rep.Absorbed), len(rep.Linked), len(rep.Seeded), len(rep.Released), ui.Size(rep.Freed))
 	}
 	if !done {
@@ -154,11 +154,11 @@ func (t *Tools) Sync(ctx context.Context, conts []core.Container, running map[st
 	return nil
 }
 
-// Prune is `cs2node workshop prune`: drop versions nothing links to.
-func (t *Tools) Prune(conts []core.Container) error {
+// Prune is `cs2node workshop prune`: drop versions nothing used lately.
+func (t *Tools) Prune(running, stopped []core.Container) error {
 	w := t.Out
 	ui.Section(w, "cs2node workshop prune")
-	n, freed := t.Store.Prune(conts, t.Cfg.KeepDays, time.Now())
+	n, freed := t.Store.Prune(running, stopped, t.Cfg.Seed, time.Now())
 	switch {
 	case t.Cfg.KeepDays == 0:
 		ui.Info(w, "keep_days is 0, every stored version is kept")

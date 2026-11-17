@@ -77,8 +77,9 @@ func ValidManifest(m string) bool {
 
 // Store is the node's copy of the workshop content.
 type Store struct {
-	Dir   string // /srv/cs2-workshop
-	Mount string // where Dir appears inside every container
+	Dir      string // /srv/cs2-workshop
+	Mount    string // where Dir appears inside every container
+	KeepDays int    // how long an unused version stays, 0 = forever
 }
 
 func (s Store) versionDir(id, manifest string) string {
@@ -225,7 +226,7 @@ type Report struct {
 	Absorbed []Item // moved into the store, the volume now links
 	Linked   []Item // already stored, the volume's copies replaced by links
 	Seeded   []Item // handed to a server that never had them
-	Released []Item // dropped as outdated, the server downloads the update itself
+	Released []Item // dropped as outdated or unused, the server downloads it again if it wants it
 	Freed    int64  // real bytes the volume swapped for links
 }
 
@@ -235,6 +236,7 @@ type Report struct {
 // in the store is offered to the server. The container must not be running.
 func (s Store) Sync(volume string, owner core.Owner, seed bool, upstream map[string]Detail) (Report, error) {
 	var rep Report
+	now := time.Now()
 	root, err := os.OpenRoot(volume)
 	if err != nil {
 		return rep, err
@@ -280,17 +282,20 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, upstream map[str
 		case payload == 0 && (stale[id] || pending): // links into an outdated version
 			release()
 		case payload == 0: // ours already
-			if it, ok := newest[id]; ok {
-				if err := s.link(root, it, owner); err != nil {
-					fail(id, err)
-					continue
-				}
-				if it.Manifest != manifest {
-					// another server fetched a newer version and the node took
-					// it over: this one follows without downloading anything,
-					// and its bookkeeping has to say so
-					rep.Linked = append(rep.Linked, it)
-				}
+			it, ok := newest[id]
+			if !ok || seed && s.idle(id, it.Manifest, now) {
+				release() // pruned, or seeded and nobody played it
+				continue
+			}
+			if err := s.link(root, it, owner); err != nil {
+				fail(id, err)
+				continue
+			}
+			if it.Manifest != manifest {
+				// another server fetched a newer version and the node took
+				// it over: this one follows without downloading anything,
+				// and its bookkeeping has to say so
+				rep.Linked = append(rep.Linked, it)
 			}
 		default: // the server downloaded something
 			if !ValidManifest(manifest) || pending {
@@ -328,6 +333,7 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, upstream map[str
 				fail(id, err)
 				continue
 			}
+			os.Chtimes(s.versionDir(it.ID, it.Manifest), now, now) // own download counts as use
 			rep.Freed += bytes
 		}
 	}
@@ -338,7 +344,7 @@ func (s Store) Sync(volume string, owner core.Owner, seed bool, upstream map[str
 			have[id] = true
 		}
 		for _, id := range slices.Sorted(maps.Keys(newest)) {
-			if have[id] || stale[id] {
+			if have[id] || stale[id] || s.idle(id, newest[id].Manifest, now) {
 				continue
 			}
 			if err := s.link(root, newest[id], owner); err != nil {
@@ -498,25 +504,29 @@ func (s Store) IDs() []string {
 	return ids
 }
 
-// Prune drops stored versions none of the given volumes has linked for
-// keepDays (0 keeps everything). A linked version's clock restarts on every
-// pass, so the days count from its last use.
-func (s Store) Prune(conts []core.Container, keepDays int, now time.Time) (removed int, freed int64) {
-	if keepDays <= 0 {
+// Prune drops versions nothing used for keep_days. A running server's link
+// always holds. Seed off: any link is use. Seed on: only MarkInUse and boot syncs.
+func (s Store) Prune(running, stopped []core.Container, seed bool, now time.Time) (removed int, freed int64) {
+	if s.KeepDays <= 0 {
 		return 0, 0
 	}
-	used := map[string]bool{}
+	conts := running
+	if !seed {
+		conts = slices.Concat(running, stopped)
+	}
+	linked := map[string]bool{}
 	for _, cont := range conts {
-		maps.Copy(used, Used(s, cont.Volume))
+		maps.Copy(linked, Used(s, cont.Volume))
 	}
 	for _, it := range s.Items() {
 		dir := s.versionDir(it.ID, it.Manifest)
-		if used[it.ID+"/"+it.Manifest] {
-			os.Chtimes(dir, now, now) // last seen in use
+		if linked[it.ID+"/"+it.Manifest] {
+			if !seed {
+				os.Chtimes(dir, now, now) // last seen in use
+			}
 			continue
 		}
-		st, err := os.Stat(dir)
-		if err != nil || now.Sub(st.ModTime()) < time.Duration(keepDays)*24*time.Hour {
+		if !s.idle(it.ID, it.Manifest, now) {
 			continue
 		}
 		if os.RemoveAll(dir) == nil {

@@ -97,9 +97,10 @@ func (m *Module) Questions() []module.Question {
 		{Key: "dir", Prompt: "Where the shared workshop content lives", Default: d.Dir, Help: "maps, models, skins, anything a server or MultiAddonManager downloads; keep it on the same filesystem as the server volumes, then taking an addon over is instant"},
 		{Key: "seed", Prompt: "Offer every cached addon to every server", Default: "true", Kind: module.Bool,
 			Help: "an addon one server downloaded costs the next one nothing; turn it off to leave each server with only what it fetched itself"},
-		{Key: "keep_days", Prompt: "Days to keep an addon version nothing uses", Default: strconv.Itoa(d.KeepDays), Kind: module.Int, Help: "0 = keep forever"},
+		{Key: "keep_days", Prompt: "Days to keep an addon version nothing uses", Default: strconv.Itoa(d.KeepDays), Kind: module.Int,
+			Help: "with seed on, used means a running server had it loaded; 0 = keep forever"},
 		{Key: "prune_hours", Prompt: "Hours between clearing out addon versions nothing uses", Default: strconv.Itoa(d.PruneHours), Kind: module.Int,
-			Help: "a server stopped in the panel still counts as using its addons; 0 = only by hand, with cs2node workshop prune"},
+			Help: "with seed off, a server stopped in the panel still counts as using its addons; 0 = only by hand, with cs2node workshop prune"},
 		{Key: "check_minutes", Prompt: "Minutes between workshop update checks", Default: strconv.Itoa(d.CheckMinutes), Kind: module.Int},
 	}
 }
@@ -126,7 +127,14 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 		return err
 	}
 	os.Chmod(m.cfg.Dir, 0o755)
-	m.store = Store{Dir: m.cfg.Dir, Mount: m.cfg.Mount}
+	m.store = Store{Dir: m.cfg.Dir, Mount: m.cfg.Mount, KeepDays: m.cfg.KeepDays}
+	ctx, stop := context.WithCancel(ctx)
+	var loops sync.WaitGroup
+	defer func() { stop(); loops.Wait() }() // loops are gone once Run returns
+	if m.cfg.Seed && m.cfg.KeepDays > 0 {
+		m.store.MarkInUse("/proc", time.Now()) // before any sync judges what is idle
+		loops.Go(func() { m.watchLoop(ctx) })
+	}
 	items := m.store.Items()
 	m.Log.Info("workshop up", "dir", m.cfg.Dir, "mount", m.cfg.Mount, "items", len(items), "seed", m.cfg.Seed)
 
@@ -148,9 +156,9 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 			m.sync(ctx, c, container)
 		}()
 	})
-	go m.updateLoop(ctx)
+	loops.Go(func() { m.updateLoop(ctx) })
 	if m.cfg.PruneHours > 0 {
-		go m.pruneLoop(ctx, c)
+		loops.Go(func() { m.pruneLoop(ctx, c) })
 	}
 	for {
 		select {
@@ -233,8 +241,22 @@ func (m *Module) updateLoop(ctx context.Context) {
 	}
 }
 
-// pruneLoop clears what no server linked for keep_days: once after start,
-// then every prune_hours. Stopped servers count, their volumes are read too.
+// watchLoop restarts the clock of whatever a server has open, every minute.
+func (m *Module) watchLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			m.store.MarkInUse("/proc", time.Now())
+		}
+	}
+}
+
+// pruneLoop clears what nothing used for keep_days: once after start, then
+// every prune_hours. Stopped servers' volumes are read too.
 func (m *Module) pruneLoop(ctx context.Context, c *core.Core) {
 	t := time.NewTimer(PruneDelay)
 	defer t.Stop()
@@ -244,13 +266,13 @@ func (m *Module) pruneLoop(ctx context.Context, c *core.Core) {
 			return
 		case <-t.C:
 		}
-		conts := c.Containers()
+		live := c.Containers()
 		running := map[string]bool{}
-		for _, cont := range conts {
+		for _, cont := range live {
 			running[cont.Name] = true
 		}
 		m.storeMu.Lock()
-		n, freed := m.store.Prune(append(conts, StoppedVolumes(running)...), m.cfg.KeepDays, time.Now())
+		n, freed := m.store.Prune(live, StoppedVolumes(running), m.cfg.Seed, time.Now())
 		m.storeMu.Unlock()
 		if n > 0 {
 			m.Log.Info("workshop pruned", "versions", n, "freed_mib", freed>>20)

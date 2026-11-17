@@ -53,6 +53,13 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
+// waits Run out at cleanup, so its loops never read the next test's globals
+func startWorkshop(t *testing.T, ctx context.Context, log *slog.Logger, client *http.Client, c *core.Core) {
+	done := make(chan struct{})
+	go func() { workshop.New(log, client).Run(ctx, c); close(done) }()
+	t.Cleanup(func() { <-done })
+}
+
 func TestServersBootingTogetherAskSteamOnce(t *testing.T) {
 	var asked atomic.Int32
 	first, hold := make(chan struct{}), make(chan struct{})
@@ -66,7 +73,7 @@ func TestServersBootingTogetherAskSteamOnce(t *testing.T) {
 	defer srv.Close()
 	old := workshop.DetailsURL
 	workshop.DetailsURL = srv.URL
-	defer func() { workshop.DetailsURL = old }()
+	t.Cleanup(func() { workshop.DetailsURL = old })
 
 	dir := t.TempDir()
 	store := workshop.Store{Dir: dir, Mount: "/tmp/cs2-workshop"}
@@ -86,7 +93,7 @@ func TestServersBootingTogetherAskSteamOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
-	go workshop.New(log, srv.Client()).Run(ctx, c)
+	startWorkshop(t, ctx, log, srv.Client(), c)
 	select {
 	case <-first: // the boot check holds Steam while the servers ask
 	case <-time.After(5 * time.Second):
@@ -143,7 +150,7 @@ func TestBootSyncAsksSteamAboutNewItems(t *testing.T) {
 	defer srv.Close()
 	old := workshop.DetailsURL
 	workshop.DetailsURL = srv.URL
-	defer func() { workshop.DetailsURL = old }()
+	t.Cleanup(func() { workshop.DetailsURL = old })
 
 	vol := shortTempDir(t)
 	if err := os.CopyFS(vol, os.DirFS(volume(t, realACF))); err != nil {
@@ -159,7 +166,7 @@ func TestBootSyncAsksSteamAboutNewItems(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
-	go workshop.New(log, srv.Client()).Run(ctx, c)
+	startWorkshop(t, ctx, log, srv.Client(), c)
 	select {
 	case <-booted:
 	case <-time.After(5 * time.Second):
@@ -212,18 +219,18 @@ func TestDaemonPruneKeepsWhatAStoppedServerLinks(t *testing.T) {
 	}
 	oldURL, oldDirs, oldDelay := workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay
 	workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay = srv.URL, []string{vols}, 0
-	defer func() { workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay = oldURL, oldDirs, oldDelay }()
+	t.Cleanup(func() { workshop.DetailsURL, core.VolumeDirs, workshop.PruneDelay = oldURL, oldDirs, oldDelay })
 
 	cfg := nodeconfig.Default()
 	wcfg := workshop.Defaults()
-	wcfg.Dir = dir
+	wcfg.Dir, wcfg.Seed = dir, false // seed off: a link is use, a stopped one too
 	cfg.SetSection("workshop", wcfg)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	c := core.New(&fakeDocker{}, cfg, []string{"workshop"}, log)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go c.Run(ctx)
-	go workshop.New(log, srv.Client()).Run(ctx, c)
+	startWorkshop(t, ctx, log, srv.Client(), c)
 	gone := filepath.Join(dir, workshop.AppID, "3070290869", v2)
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(20 * time.Millisecond) {
 		if _, err := os.Stat(gone); errors.Is(err, os.ErrNotExist) {

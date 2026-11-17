@@ -175,7 +175,7 @@ type WorkshopReady struct {
 	Absorbed int    `json:"absorbed,omitempty"` // moved into the node's store
 	Linked   int    `json:"linked,omitempty"`   // a copy the node already had
 	Seeded   int    `json:"seeded,omitempty"`   // handed over without a download
-	Released int    `json:"released,omitempty"` // given back for the server to update
+	Released int    `json:"released,omitempty"` // given back: outdated or unused, the server downloads it again
 	Freed    int64  `json:"freed,omitempty"`    // bytes the volume no longer holds
 	Err      string `json:"err,omitempty"`
 }
