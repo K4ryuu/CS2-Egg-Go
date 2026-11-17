@@ -30,6 +30,8 @@ Rules it follows:
 
 The egg edits `game/csgo/gameinfo.gi` to mount what you enabled, and keeps Metamod first in the search paths, which is what CounterStrikeSharp needs. The file is backed up, verified after the edit, and restored if the edit went wrong.
 
+The egg only adds the missing lines of enabled frameworks, it never removes one, your own included. A CS2 update or `SRCDS_VALIDATE` can bring back Valve's file, then only the enabled frameworks come back.
+
 `ALLOW_TOKENLESS` also lives here: it flips `RequireLoginForDedicatedServers`.
 
 ## Compatibility
