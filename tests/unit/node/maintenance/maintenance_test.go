@@ -5,6 +5,7 @@ package maintenance_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"os"
@@ -13,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/core"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/node/maintenance"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/node/nodeconfig"
 )
 
 type fakeEngine struct{ pruned, cached int }
@@ -176,5 +179,43 @@ func TestSetupSkipsWhenAlreadyOn(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "already on") || !strings.Contains(out.String(), "true") {
 		t.Fatalf("output: %s", out.String())
+	}
+}
+
+// a node that restarts more often than every_hours (self-update, install) never got a pass
+func TestPassIsDueFromTheLastOneNotFromBoot(t *testing.T) {
+	now := time.Date(2026, 11, 17, 12, 0, 0, 0, time.UTC)
+	for name, tc := range map[string]struct {
+		last time.Time
+		ran  bool
+		next time.Time
+	}{
+		"due in an hour": {now.Add(-167 * time.Hour), false, now.Add(time.Hour)},
+		"overdue":        {now.Add(-200 * time.Hour), true, now.Add(168 * time.Hour)},
+		"never ran":      {time.Time{}, true, now.Add(168 * time.Hour)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg := maintenance.Defaults()
+			cfg.DiskWarnPercent = 0
+			m, _, _ := newModule(t, cfg)
+			m.Now = func() time.Time { return now }
+			if err := maintenance.SaveStats(maintenance.StateDir, maintenance.Stats{Last: tc.last}); err != nil {
+				t.Fatal(err)
+			}
+			ncfg := nodeconfig.Default()
+			ncfg.SetSection("maintenance", cfg)
+			c := core.New(nil, ncfg, []string{"maintenance"}, slog.New(slog.DiscardHandler))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			go m.Run(ctx, c)
+			var st maintenance.Status
+			for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+				if raw, ok := c.Status("", "").Module["maintenance"]; ok && json.Unmarshal(raw, &st) == nil &&
+					st.NextRun.Equal(tc.next) && st.Stats.Last.Equal(now) == tc.ran {
+					return
+				}
+			}
+			t.Fatalf("next=%v last=%v, want next=%v ran=%v", st.NextRun, st.Stats.Last, tc.next, tc.ran)
+		})
 	}
 }

@@ -134,11 +134,15 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 	c.ProvideStatus(m.Name(), func() any { return m.Snapshot() })
 
 	var pass <-chan time.Time
-	if every := time.Duration(m.cfg.EveryHours) * time.Hour; every > 0 {
-		t := time.NewTicker(every)
-		defer t.Stop()
-		pass = t.C
-		m.setNext(m.Now().Add(every))
+	var timer *time.Timer
+	every := time.Duration(m.cfg.EveryHours) * time.Hour
+	if every > 0 {
+		// from the last pass, not from boot, a node restarting weekly never got one
+		wait := max(m.stats.Last.Add(every).Sub(m.Now()), 0)
+		timer = time.NewTimer(wait)
+		defer timer.Stop()
+		pass = timer.C
+		m.setNext(m.Now().Add(wait))
 	}
 	watch := time.NewTicker(time.Hour)
 	defer watch.Stop()
@@ -151,7 +155,8 @@ func (m *Module) Run(ctx context.Context, c *core.Core) error {
 			m.Watch(c)
 		case <-pass:
 			m.Pass(ctx, c, m.cfg.DryRun)
-			m.setNext(m.Now().Add(time.Duration(m.cfg.EveryHours) * time.Hour))
+			timer.Reset(every)
+			m.setNext(m.Now().Add(every))
 		}
 	}
 }
