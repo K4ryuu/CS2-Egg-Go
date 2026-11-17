@@ -91,3 +91,20 @@ func TestHostnameReply(t *testing.T) {
 		}
 	}
 }
+
+func BenchmarkFeed(b *testing.B) {
+	w := watch.New(500)
+	lines := []string{
+		"Host activate: Changelevel (de_mirage)",
+		"Client 2 'Player' signon state SIGNONSTATE_SPAWN -> SIGNONSTATE_FULL",
+		`L 11/17/2026 - 19:44:34: "Player<2><[U:1:12345]><CT>" say "gg"`,
+		"[CSSharp] Plugin SomePlugin loaded",
+		"SV:  Dropped client 'Player' from server(2): NETWORK_DISCONNECT_DISCONNECT_BY_USER",
+	}
+	for b.Loop() {
+		for _, l := range lines {
+			w.Feed(l)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(lines)), "ns/line")
+}

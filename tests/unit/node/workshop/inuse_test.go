@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -144,5 +145,28 @@ func TestListShowsLastUse(t *testing.T) {
 		if !strings.Contains(out.String(), tc.want) {
 			t.Fatalf("%d days: want %q in\n%s", tc.days, tc.want, out.String())
 		}
+	}
+}
+
+// ~2500 fds like game2, one per process into the store
+func BenchmarkMarkInUse(b *testing.B) {
+	store := workshop.Store{Dir: b.TempDir(), Mount: "/tmp/cs2-workshop", KeepDays: 7}
+	os.MkdirAll(filepath.Join(store.Dir, workshop.AppID, "1", "2"), 0o755)
+	proc := b.TempDir()
+	for pid := range 50 {
+		fd := filepath.Join(proc, strconv.Itoa(1000+pid), "fd")
+		if err := os.MkdirAll(fd, 0o755); err != nil {
+			b.Fatal(err)
+		}
+		for n := range 50 {
+			target := "/dev/null"
+			if n == 0 {
+				target = "/tmp/cs2-workshop/730/1/2/1_dir.vpk"
+			}
+			os.Symlink(target, filepath.Join(fd, strconv.Itoa(n)))
+		}
+	}
+	for b.Loop() {
+		store.MarkInUse(proc, time.Now())
 	}
 }

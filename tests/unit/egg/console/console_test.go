@@ -4,6 +4,8 @@ package console_test
 
 import (
 	"bytes"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -174,4 +176,26 @@ func TestSecretsInTypedCommandsAreRedacted(t *testing.T) {
 			t.Errorf("%q\n got  %q\n want %q", in, got, want)
 		}
 	}
+}
+
+func BenchmarkHandle(b *testing.B) {
+	patterns := make([]string, 20)
+	for i := range patterns {
+		patterns[i] = fmt.Sprintf("noise pattern %d", i)
+	}
+	p := &console.Pipeline{Log: logx.New("P", logx.Info, io.Discard), Out: io.Discard,
+		Mask: console.Masker("TOKEN123"), Filter: console.NewFilter(patterns)}
+	lines := []string{
+		`L 11/17/2026 - 19:44:34: "Player<2><[U:1:12345]><CT>" say "gg"`,
+		"[CSSharp] Plugin SomePlugin loaded",
+		"Client 2 'Player' signon state SIGNONSTATE_SPAWN -> SIGNONSTATE_FULL",
+		"SV:  Dropped client 'Player' from server(2): NETWORK_DISCONNECT_DISCONNECT_BY_USER",
+		"sv_cheats 0",
+	}
+	for b.Loop() {
+		for _, l := range lines {
+			p.Handle(l)
+		}
+	}
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(lines)), "ns/line")
 }

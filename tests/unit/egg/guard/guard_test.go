@@ -39,7 +39,7 @@ type harness struct {
 	node  bool
 }
 
-func newHarness(t *testing.T, patch func(*configs.Guard)) *harness {
+func newHarness(t testing.TB, patch func(*configs.Guard)) *harness {
 	t.Helper()
 	var cfg configs.Guard
 	if err := json.Unmarshal([]byte(cfgJSON), &cfg); err != nil {
@@ -549,4 +549,23 @@ func TestACraftedNameCannotPoisonTheSteamIDMap(t *testing.T) {
 	if !blocked {
 		t.Fatal("a name bound an attacker address to a whitelisted SteamID: it is now immune")
 	}
+}
+
+// one player's whole visit plus the usual chatter, a clock step per round
+// keeps every rule window clear
+func BenchmarkInspect(b *testing.B) {
+	h := newHarness(b, nil)
+	h.feed("Host activate: Loading (de_dust2)", "BOTGUARD_CHANNEL_OK")
+	lines := []string{
+		"Accepting Steam Net connection #2 UDP steamid:76561198000000002@3.3.3.3:27005",
+		"Client 2 'Player' signon state SIGNONSTATE_SPAWN -> SIGNONSTATE_FULL",
+		`L 11/17/2026 - 19:44:34: "Player<2><[U:1:12345]><CT>" say "gg"`,
+		"[CSSharp] Plugin SomePlugin loaded",
+		"SV:  Dropped client 'Player' from server(2): NETWORK_DISCONNECT_DISCONNECT_BY_USER",
+	}
+	for b.Loop() {
+		h.clock = h.clock.Add(time.Minute)
+		h.feed(lines...)
+	}
+	b.ReportMetric(float64(b.Elapsed().Nanoseconds())/float64(b.N*len(lines)), "ns/line")
 }
