@@ -13,6 +13,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 
 - A workshop addon whose author published an update never updated on servers using the workshop cache ([#8](https://github.com/K4ryuu/CS2-Egg-Go/issues/8)). The outdated item went back to the server as real files with its old `appworkshop_730.acf` entry, and MultiAddonManager and AddonsManager skip an item that looks installed unless their re-download option is on. The outdated item is now removed from the server, files and acf entry both, so the game and both plugins download the current version. The node also asks Steam at every boot instead of trusting a check up to `check_minutes` old, and `cs2node workshop sync` now handles updates too instead of linking the old version back.
 - Addons and the node stayed on a beta after a stable release came out. An installed prerelease now always gives way to a stable release.
+- Turning on SwiftlyS2 or ModSharp on an older server put it above MetaMod in `gameinfo.gi`, so MetaMod and CounterStrikeSharp stopped loading.
 
 ## [1.1.2] - 2026-11-09
 

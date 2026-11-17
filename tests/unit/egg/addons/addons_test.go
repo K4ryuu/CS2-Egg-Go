@@ -386,6 +386,46 @@ func TestMetamodFirstStaysBelowBackupsAcrossRepeatedRuns(t *testing.T) {
 	}
 }
 
+func TestMetamodFirstMovesAboveAddonAddedOverBackups(t *testing.T) {
+	broken := `"GameInfo"
+{
+	FileSystem
+	{
+		SearchPaths
+		{
+			Game_LowViolence	csgo_lv // Perfect World content override
+            Game    csgo/addons/swiftlys2
+            Game    csgo/backups
+            Game    csgo/addons/metamod
+			Game	csgo
+			Game	core
+		}
+	}
+}
+`
+	p := filepath.Join(t.TempDir(), "gameinfo.gi")
+	os.WriteFile(p, []byte(broken), 0o644)
+	gi := addons.Gameinfo{Path: p}
+
+	if changed, err := gi.MetamodFirst(); err != nil || !changed {
+		t.Fatalf("must reorder: %v %v", changed, err)
+	}
+	if changed, err := gi.MetamodFirst(); err != nil || changed {
+		t.Fatalf("second run must be a no-op: %v %v", changed, err)
+	}
+	data, _ := os.ReadFile(p)
+	lines := strings.Split(string(data), "\n")
+	want := []string{"csgo/backups", "csgo/addons/metamod", "csgo/addons/swiftlys2"}
+	for i, w := range want {
+		if !strings.HasSuffix(lines[7+i], w) {
+			t.Fatalf("order after LowViolence: %q", lines[6:10])
+		}
+	}
+	if strings.Count(string(data), "csgo/addons/metamod") != 1 || strings.Count(string(data), "csgo/backups") != 1 {
+		t.Fatalf("no duplicates: %s", data)
+	}
+}
+
 func TestMetamodUpdaterEndToEnd(t *testing.T) {
 	root := t.TempDir()
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

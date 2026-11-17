@@ -41,9 +41,7 @@ func addGamePath(content, addon string) (string, bool) {
 	return content, false
 }
 
-// metamod needs to sit right after backups if backups exists, not the other
-// way round - it's not an addon, just the engine's dump path, so don't treat
-// it like a stray one or it gets shoved below metamod again next boot
+// backups (if any) then metamod, right under LowViolence
 func metamodFirst(content string) (string, bool) {
 	if !metamodLine.MatchString(content) {
 		return content, false
@@ -64,21 +62,21 @@ func metamodFirst(content string) (string, bool) {
 	if lv < 0 || mm < 0 {
 		return content, false
 	}
-	anchor := lv
-	if bk >= 0 {
-		anchor = bk
-	}
-	if mm == anchor+1 {
+	if bk < 0 && mm == lv+1 || bk == lv+1 && mm == lv+2 {
 		return content, false
+	}
+	head := []string{GameinfoLine("csgo/addons/metamod")}
+	if bk >= 0 {
+		head = append([]string{lines[bk]}, head...)
 	}
 	var out []string
 	for i, l := range lines {
-		if i == mm {
+		if i == mm || i == bk {
 			continue
 		}
 		out = append(out, l)
-		if i == anchor {
-			out = append(out, GameinfoLine("csgo/addons/metamod"))
+		if i == lv {
+			out = append(out, head...)
 		}
 	}
 	return strings.Join(out, "\n"), true
