@@ -15,6 +15,7 @@ import (
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/proto"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/version"
 )
 
 // DotNetVersion is the runtime ModSharp ships against. Pinned on purpose.
@@ -118,6 +119,10 @@ func (e *Env) decide(label, key, latest string, pinned bool) bool {
 		e.Log.Logf(logx.Success, "%s is up-to-date (%s)", label, current)
 		return false
 	case Downgrade:
+		if version.IsPrerelease(current) && !version.IsPrerelease(latest) {
+			e.Log.Logf(logx.Info, "%s %s is a prerelease, moving to stable %s", label, current, latest)
+			return true
+		}
 		e.Log.Logf(logx.Info, "%s is at a newer version (%s) than latest (%s). Skipping downgrade.", label, current, latest)
 		return false
 	}

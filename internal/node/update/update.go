@@ -30,7 +30,8 @@ const Repo = "K4ryuu/CS2-Egg-Go"
 // AssetName is the node binary's asset name.
 const AssetName = "cs2node_linux_amd64"
 
-// Candidate is a newer release than the running one.
+// Candidate is the release the channel wants in place of the running one:
+// newer, or a stable one for a node still on a beta build.
 type Candidate struct {
 	Version   string
 	Binary    addons.Asset
@@ -54,7 +55,9 @@ func Check(ctx context.Context, client *http.Client, channel, current string) (*
 	if err != nil {
 		return nil, err
 	}
-	if version.Compare(rel.Tag, current) <= 0 {
+	cmp := version.Compare(rel.Tag, current)
+	leaveBeta := version.IsPrerelease(current) && !version.IsPrerelease(rel.Tag)
+	if cmp == 0 || cmp < 0 && !leaveBeta {
 		return nil, ErrUpToDate
 	}
 	bin, ok := rel.Asset(regexp.MustCompile("^" + regexp.QuoteMeta(AssetName) + "$"))

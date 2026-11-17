@@ -2,12 +2,12 @@
 
 Metamod, CounterStrikeSharp, SwiftlyS2 and ModSharp install and update themselves on every boot while their panel switch is on. Nothing to download by hand, nothing to unpack.
 
-| Framework | Panel variable | Source |
-|---|---|---|
-| Metamod:Source | `INSTALL_METAMOD` | [alliedmodders/metamod-source](https://github.com/alliedmodders/metamod-source) |
-| CounterStrikeSharp | `INSTALL_CSS` | [roflmuffin/CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp) |
-| SwiftlyS2 | `INSTALL_SWIFTLY` | [swiftly-solution/swiftlys2](https://github.com/swiftly-solution/swiftlys2) |
-| ModSharp | `INSTALL_MODSHARP` | [Kxnrl/modsharp-public](https://github.com/Kxnrl/modsharp-public) |
+| Framework          | Panel variable     | Source                                                                            |
+| ------------------ | ------------------ | --------------------------------------------------------------------------------- |
+| Metamod:Source     | `INSTALL_METAMOD`  | [alliedmodders/metamod-source](https://github.com/alliedmodders/metamod-source)   |
+| CounterStrikeSharp | `INSTALL_CSS`      | [roflmuffin/CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp) |
+| SwiftlyS2          | `INSTALL_SWIFTLY`  | [swiftly-solution/swiftlys2](https://github.com/swiftly-solution/swiftlys2)       |
+| ModSharp           | `INSTALL_MODSHARP` | [Kxnrl/modsharp-public](https://github.com/Kxnrl/modsharp-public)                 |
 
 ## What happens on boot
 
@@ -20,7 +20,7 @@ KitsuneLab | OK    | CounterStrikeSharp updated to v1.0.374
 
 Rules it follows:
 
-- An installed version newer than the release is left alone, so a manual upgrade is not undone.
+- An installed version newer than the release is left alone, so a manual upgrade is not undone. One exception: an installed prerelease gives way to a stable release, even an older one. With `PRERELEASE` off that is the latest stable; with it on, a stable published after the beta.
 - `versions.txt` is only written after the files are in place. A failed copy is retried next boot instead of being recorded as done.
 - GitHub answering 403 or 429 means rate limited: the check is skipped for this boot, the installed version keeps running, and the console says so. With the [addon cache](modules/addon-cache.md) on the node, this stops happening.
 - SwiftlyS2 over an existing install refreshes `bin/` and `gamedata/` only, so your configs and plugins survive.
@@ -34,11 +34,11 @@ The egg edits `game/csgo/gameinfo.gi` to mount what you enabled, and keeps Metam
 
 ## Compatibility
 
-| | Works with | Does not |
-|---|---|---|
-| CounterStrikeSharp | Metamod, SwiftlyS2 | ModSharp |
-| SwiftlyS2 | CounterStrikeSharp | ModSharp |
-| ModSharp | Metamod | CounterStrikeSharp, SwiftlyS2 |
+|                    | Works with         | Does not                      |
+| ------------------ | ------------------ | ----------------------------- |
+| CounterStrikeSharp | Metamod, SwiftlyS2 | ModSharp                      |
+| SwiftlyS2          | CounterStrikeSharp | ModSharp                      |
+| ModSharp           | Metamod            | CounterStrikeSharp, SwiftlyS2 |
 
 Turning on a pair that fights gets you a warning, not a refusal. You know your setup better than the egg does.
 

@@ -33,6 +33,24 @@ func TestCompareOrdersLikeSortV(t *testing.T) {
 	}
 }
 
+func TestIsPrereleaseOnlyTakesSemverSuffixes(t *testing.T) {
+	for v, want := range map[string]bool{
+		"v1.5.3-beta.14":    true,
+		"1.0.0-rc1":         true,
+		"v2.0.0-alpha.1":    true,
+		"v0.2.0-beta.1+425": true,
+		"v1.5.3":            false,
+		"v1.0.380":          false,
+		"git-227":           false,
+		"git1491":           false,
+		"2.0.0.1491":        false,
+	} {
+		if got := version.IsPrerelease(v); got != want {
+			t.Errorf("IsPrerelease(%q) = %v, want %v", v, got, want)
+		}
+	}
+}
+
 func TestDefaultsWhenNotBuiltWithLdflags(t *testing.T) {
 	if version.Version == "" || version.Channel == "" {
 		t.Fatalf("Version=%q Channel=%q must have defaults", version.Version, version.Channel)

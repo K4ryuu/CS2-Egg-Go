@@ -75,6 +75,13 @@ func TestCheckFollowsTheChannel(t *testing.T) {
 	if _, err := update.Check(ctx, srv.Client(), "stable", "3.0.0"); !errors.Is(err, update.ErrUpToDate) {
 		t.Fatalf("newer local build never downgrades: %v", err)
 	}
+	c, err = update.Check(ctx, srv.Client(), "stable", "2.2.0-beta.3")
+	if err != nil || c.Version != "2.1.0" {
+		t.Fatalf("stable moves a beta build back to stable: %+v %v", c, err)
+	}
+	if _, err := update.Check(ctx, srv.Client(), "beta", "2.2.0-beta.3"); !errors.Is(err, update.ErrUpToDate) {
+		t.Fatalf("beta keeps its newest prerelease: %v", err)
+	}
 	if _, err := update.Check(ctx, srv.Client(), "nightly", "1.0.0"); err == nil {
 		t.Fatal("unknown channel must fail")
 	}

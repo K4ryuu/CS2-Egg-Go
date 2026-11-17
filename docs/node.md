@@ -80,7 +80,7 @@ Logs: `journalctl -u cs2node -f`.
 
 ## Updates
 
-The daemon checks its release channel daily and installs what is newer, after verifying the checksum. `stable` gets stable releases, `beta` is prereleases, `dev` never updates itself.
+The daemon checks its release channel daily and installs what is newer, after verifying the checksum. `stable` gets stable releases, `beta` is prereleases, `dev` never updates itself. A node switched from `beta` back to `stable` moves to the latest stable release, even an older one.
 
 ```bash
 sudo cs2node update      # check right now

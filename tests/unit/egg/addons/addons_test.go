@@ -14,11 +14,13 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
 	"github.com/K4ryuu/CS2-Egg-Go/internal/logx"
+	"github.com/K4ryuu/CS2-Egg-Go/internal/version"
 )
 
 func TestFetchReleaseStableAndPrereleaseShapes(t *testing.T) {
@@ -120,6 +122,58 @@ func TestNeedsUpdateVerdicts(t *testing.T) {
 	for _, c := range cases {
 		if got := addons.NeedsUpdate(c.cur, c.latest); got != c.want {
 			t.Errorf("NeedsUpdate(%q, %q) = %v, want %v", c.cur, c.latest, got, c.want)
+		}
+	}
+}
+
+func TestABetaGivesWayToStable(t *testing.T) {
+	var archive bytes.Buffer
+	zw := zip.NewWriter(&archive)
+	f, _ := zw.Create("addons/swiftlys2/bin/swiftlys2.so")
+	f.Write([]byte("so"))
+	zw.Close()
+	var newest string
+	rel := func(tag string) string {
+		return `{"tag_name":"` + tag + `","prerelease":` + strconv.FormatBool(version.IsPrerelease(tag)) +
+			`,"assets":[{"name":"swiftlys2-linux-x64-with-runtimes.zip","browser_download_url":"` + addons.APIBase + `/dl/sw.zip"}]}`
+	}
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/swiftly-solution/swiftlys2/releases/latest":
+			w.Write([]byte(rel("v1.5.2")))
+		case "/repos/swiftly-solution/swiftlys2/releases":
+			w.Write([]byte("[" + rel(newest) + "," + rel("v1.5.2") + "]"))
+		case "/dl/sw.zip":
+			w.Write(archive.Bytes())
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer api.Close()
+	addons.APIBase = api.URL
+	addons.Mirrors = nil
+	for _, c := range []struct {
+		installed  string
+		prerelease bool
+		newest     string
+		want       string
+	}{
+		{"v1.5.3-beta.14", false, "v1.5.3-beta.14", "v1.5.2"},
+		{"v1.5.3", false, "v1.5.2", "v1.5.3"},
+		{"v2.0.0-alpha.1", true, "v1.5.2", "v1.5.2"},
+		{"v1.5.3-beta.15", true, "v1.5.3-beta.14", "v1.5.3-beta.15"},
+	} {
+		newest = c.newest
+		root := t.TempDir()
+		env := &addons.Env{
+			Root: root, Temp: filepath.Join(root, "temps"), Prerelease: c.prerelease,
+			Versions: addons.Versions{Path: filepath.Join(root, "versions.txt")},
+			Log:      logx.New("T", logx.Debug, &bytes.Buffer{}), HTTP: api.Client(),
+		}
+		env.Versions.Set("Swiftly", c.installed)
+		env.UpdateSwiftly(context.Background())
+		if got := env.Versions.Get("Swiftly"); got != c.want {
+			t.Errorf("installed %s, prerelease=%v, newest %s: got %s, want %s", c.installed, c.prerelease, c.newest, got, c.want)
 		}
 	}
 }
