@@ -267,6 +267,34 @@ func TestExtractRefusesEscapes(t *testing.T) {
 	}
 }
 
+// the .NET runtime tarball starts with a "./" entry, that's the target dir itself
+func TestExtractAcceptsRootDirEntry(t *testing.T) {
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	tw.WriteHeader(&tar.Header{Name: "./", Mode: 0o755, Typeflag: tar.TypeDir})
+	tw.WriteHeader(&tar.Header{Name: "./dotnet", Mode: 0o755, Size: 4, Typeflag: tar.TypeReg})
+	tw.Write([]byte("host"))
+	tw.Close()
+	gz.Close()
+	tg := filepath.Join(dir, "rt.tgz")
+	os.WriteFile(tg, buf.Bytes(), 0o644)
+	if err := addons.ExtractTarGz(tg, filepath.Join(dir, "tar")); err != nil {
+		t.Fatal(err)
+	}
+	z := filepath.Join(dir, "rt.zip")
+	makeZip(t, z, map[string]string{"./": "", "./dotnet": "host"})
+	if err := addons.ExtractZip(z, filepath.Join(dir, "zip")); err != nil {
+		t.Fatal(err)
+	}
+	for _, out := range []string{"tar", "zip"} {
+		if data, _ := os.ReadFile(filepath.Join(dir, out, "dotnet")); string(data) != "host" {
+			t.Fatalf("%s: dotnet missing", out)
+		}
+	}
+}
+
 const gameinfo = `"GameInfo"
 {
 	FileSystem

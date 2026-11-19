@@ -167,11 +167,11 @@ func entryPath(name string) (string, error) {
 			return "", fmt.Errorf("archive entry escapes target dir: %q", name)
 		}
 	}
-	rel := strings.TrimPrefix(path.Clean("/"+slash), "/")
-	if rel == "" || rel == "." {
-		return "", fmt.Errorf("archive entry has no name")
+	// "./" is the target dir itself, callers skip it
+	if rel := strings.TrimPrefix(path.Clean("/"+slash), "/"); rel != "" {
+		return rel, nil
 	}
-	return rel, nil
+	return ".", nil
 }
 
 // openTarget opens dir as a root. Everything an archive asks for is created
@@ -199,6 +199,9 @@ func ExtractZip(src, dir string) error {
 		rel, err := entryPath(f.Name)
 		if err != nil {
 			return err
+		}
+		if rel == "." {
+			continue
 		}
 		if f.FileInfo().IsDir() {
 			if err := root.MkdirAll(rel, 0o755); err != nil {
@@ -251,6 +254,9 @@ func ExtractTarGz(src, dir string) error {
 		rel, err := entryPath(h.Name)
 		if err != nil {
 			return err
+		}
+		if rel == "." {
+			continue
 		}
 		switch h.Typeflag {
 		case tar.TypeDir:
