@@ -2,7 +2,7 @@
 
 The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://github.com/K4ryuu/CS2-Egg/blob/main/CHANGELOG).
 
-## [1.2.0] - 2026-11-17
+## [1.2.0] - 2026-11-19
 
 ### Added
 
