@@ -41,6 +41,19 @@ func addGamePath(content, addon string) (string, bool) {
 	return content, false
 }
 
+// removeGamePath drops every "Game <addon>" line.
+func removeGamePath(content, addon string) (string, bool) {
+	line := regexp.MustCompile(`^\s*Game\s+` + regexp.QuoteMeta(addon) + `\s*(//.*)?$`)
+	lines := strings.Split(content, "\n")
+	out := lines[:0]
+	for _, l := range lines {
+		if !line.MatchString(l) {
+			out = append(out, l)
+		}
+	}
+	return strings.Join(out, "\n"), len(out) < len(lines)
+}
+
 // backups (if any) then metamod, right under LowViolence
 func metamodFirst(content string) (string, bool) {
 	if !metamodLine.MatchString(content) {
@@ -130,6 +143,12 @@ func (g Gameinfo) Add(addon string) (bool, error) {
 		func(c string) bool { return hasGamePath(c, addon) })
 }
 
+// Remove drops addon from the search paths.
+func (g Gameinfo) Remove(addon string) (bool, error) {
+	return g.edit(func(c string) (string, bool) { return removeGamePath(c, addon) },
+		func(c string) bool { return !hasGamePath(c, addon) })
+}
+
 // MetamodFirst reorders the metamod entry when needed.
 func (g Gameinfo) MetamodFirst() (bool, error) {
 	return g.edit(metamodFirst, func(c string) bool { return metamodLine.MatchString(c) })
@@ -147,10 +166,4 @@ func (g Gameinfo) SetTokenless(allow bool) (bool, error) {
 		}
 		return setTokenless(c, want), true
 	}, func(c string) bool { return tokenlessValue(c) == want })
-}
-
-// HasSharp reports whether ModSharp is listed (used for the compat warning).
-func (g Gameinfo) HasSharp() bool {
-	data, err := os.ReadFile(g.Path)
-	return err == nil && regexp.MustCompile(`Game[[:space:]]*sharp`).Match(data)
 }

@@ -7,7 +7,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/K4ryuu/CS2-Egg-Go/internal/egg/addons"
@@ -66,5 +68,43 @@ func TestModSharpInstallsTheRuntimeItsCoreNames(t *testing.T) {
 				t.Fatalf("runtime %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// ModSharp runs alone (MetaMod aside): with it on, CSS and SwiftlyS2 must not
+// load, and switching it off brings them back
+func TestModSharpLoadsAlone(t *testing.T) {
+	oldAPI, oldMirrors, oldURL := addons.APIBase, addons.Mirrors, addons.DotNetURL
+	t.Cleanup(func() { addons.APIBase, addons.Mirrors, addons.DotNetURL = oldAPI, oldMirrors, oldURL })
+	api := httptest.NewServer(http.NotFoundHandler())
+	defer api.Close()
+	addons.APIBase, addons.Mirrors, addons.DotNetURL = api.URL, nil, api.URL+"/%s/%s"
+	root := t.TempDir()
+	csgo := filepath.Join(root, "game", "csgo")
+	vdf := filepath.Join(csgo, "addons", "metamod", "counterstrikesharp.vdf")
+	os.MkdirAll(filepath.Dir(vdf), 0o755)
+	os.WriteFile(vdf, []byte("css"), 0o644)
+	gi := addons.Gameinfo{Path: filepath.Join(csgo, "gameinfo.gi")}
+	os.WriteFile(gi.Path, []byte(gameinfo), 0o644)
+	gi.Add("csgo/addons/swiftlys2")
+	env := &addons.Env{
+		Root: root, Temp: filepath.Join(root, "temps"),
+		Versions: addons.Versions{Path: filepath.Join(root, "versions.txt")},
+		Log:      logx.New("T", logx.Debug, &bytes.Buffer{}), HTTP: api.Client(),
+	}
+	loaded := func() (sharp, swiftly, css bool) {
+		data, _ := os.ReadFile(gi.Path)
+		_, err := os.Stat(vdf)
+		return strings.Contains(string(data), "Game    sharp"), strings.Contains(string(data), "Game    csgo/addons/swiftlys2"), err == nil
+	}
+	sel := addons.Selection{Metamod: true, CSS: true, Swiftly: true, ModSharp: true}
+	env.UpdateAll(context.Background(), sel, false)
+	if sharp, swiftly, css := loaded(); !sharp || swiftly || css {
+		t.Fatalf("ModSharp on: sharp=%v swiftly=%v css=%v, want only sharp", sharp, swiftly, css)
+	}
+	sel.ModSharp = false
+	env.UpdateAll(context.Background(), sel, false)
+	if sharp, swiftly, css := loaded(); sharp || !swiftly || !css {
+		t.Fatalf("ModSharp off: sharp=%v swiftly=%v css=%v, want swiftly and css", sharp, swiftly, css)
 	}
 }

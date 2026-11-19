@@ -33,7 +33,7 @@ Each one installs and updates itself on every restart while it is on.
 | `INSTALL_METAMOD` | everything | Needed by CounterStrikeSharp, which turns it on for you |
 | `INSTALL_CSS` | Metamod, SwiftlyS2 | CounterStrikeSharp. Pulls Metamod in |
 | `INSTALL_SWIFTLY` | CounterStrikeSharp | SwiftlyS2, standalone, no Metamod needed |
-| `INSTALL_MODSHARP` | Metamod | Its own .NET runtime. The console warns when it sits next to CSS or SwiftlyS2 |
+| `INSTALL_MODSHARP` | Metamod | Its own .NET runtime. Runs alone: CSS and SwiftlyS2 stay unloaded while it is on |
 | `PRERELEASE` | | Take prereleases from GitHub. Unstable by definition |
 
 Details, including how the updaters decide what to install: [addon frameworks](../addons.md). To hold every server on one version, see the [addon cache](../modules/addon-cache.md).

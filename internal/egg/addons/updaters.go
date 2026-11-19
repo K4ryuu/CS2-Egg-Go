@@ -376,13 +376,22 @@ func (e *Env) UpdateAll(ctx context.Context, sel Selection, allowTokenless bool)
 			e.Log.Logf(logx.Error, "MetaMod directory not found at %s. CounterStrikeSharp will fail to load until MetaMod is installed.", filepath.Join(e.addonsDir(), "metamod"))
 		}
 	}
-	if sel.ModSharp || gi.HasSharp() {
-		if sel.CSS {
-			e.Log.Log(logx.Warning, "ModSharp is present alongside CounterStrikeSharp. These addons may be incompatible and may cause conflicts. It is recommended to use only one of them.")
-		}
-		if sel.Swiftly {
-			e.Log.Log(logx.Warning, "ModSharp is present alongside SwiftlyS2. These addons may be incompatible and may cause conflicts. It is recommended to use only one of them.")
-		}
+	// ModSharp runs alone (MetaMod is fine). The side that is on unloads the
+	// other one, files stay so switching back is instant
+	if sel.ModSharp && (sel.CSS || sel.Swiftly) {
+		e.Log.Log(logx.Warning, "ModSharp does not run next to CounterStrikeSharp or SwiftlyS2, keeping them unloaded while ModSharp is on")
+		sel.CSS, sel.Swiftly = false, false
+	}
+	vdf := filepath.Join(e.addonsDir(), "metamod", "counterstrikesharp.vdf")
+	switch {
+	case sel.ModSharp:
+		e.removePath(gi, "csgo/addons/swiftlys2")
+		e.rename(vdf, vdf+".disabled", "CounterStrikeSharp unloaded")
+	case sel.CSS || sel.Swiftly:
+		e.removePath(gi, "sharp")
+	}
+	if sel.CSS {
+		e.rename(vdf+".disabled", vdf, "CounterStrikeSharp loaded again")
 	}
 	if sel.Metamod {
 		e.UpdateMetamod(ctx)
@@ -429,6 +438,25 @@ func (e *Env) addPath(gi Gameinfo, addon string) {
 		e.Log.Logf(logx.Info, "Added %s to gameinfo.gi", addon)
 	default:
 		e.Log.Logf(logx.Debug, "%s already in gameinfo.gi", addon)
+	}
+}
+
+func (e *Env) removePath(gi Gameinfo, addon string) {
+	switch changed, err := gi.Remove(addon); {
+	case err != nil && !errors.Is(err, errNoGameinfo):
+		e.Log.Logf(logx.Error, "Failed to remove %s from gameinfo.gi: %v", addon, err)
+	case changed:
+		e.Log.Logf(logx.Info, "Removed %s from gameinfo.gi", addon)
+	}
+}
+
+// rename moves a file when it is there, MetaMod only loads *.vdf
+func (e *Env) rename(from, to, done string) {
+	switch err := os.Rename(from, to); {
+	case err == nil:
+		e.Log.Log(logx.Info, done)
+	case !errors.Is(err, fs.ErrNotExist):
+		e.Log.Logf(logx.Error, "Failed to rename %s: %v", from, err)
 	}
 }
 

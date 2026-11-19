@@ -30,7 +30,7 @@ Rules it follows:
 
 The egg edits `game/csgo/gameinfo.gi` to mount what you enabled, and keeps Metamod first in the search paths, which is what CounterStrikeSharp needs. The file is backed up, verified after the edit, and restored if the edit went wrong.
 
-The egg only adds the missing lines of enabled frameworks, it never removes one, your own included. A CS2 update or `SRCDS_VALIDATE` can bring back Valve's file, then only the enabled frameworks come back.
+The egg adds the missing lines of enabled frameworks and leaves other lines alone, your own included. The one exception is ModSharp, see [Compatibility](#compatibility). A CS2 update or `SRCDS_VALIDATE` can bring back Valve's file, then only the enabled frameworks come back.
 
 `ALLOW_TOKENLESS` also lives here: it flips `RequireLoginForDedicatedServers`.
 
@@ -42,7 +42,7 @@ The egg only adds the missing lines of enabled frameworks, it never removes one,
 | SwiftlyS2          | CounterStrikeSharp | ModSharp                      |
 | ModSharp           | Metamod            | CounterStrikeSharp, SwiftlyS2 |
 
-Turning on a pair that fights gets you a warning, not a refusal. You know your setup better than the egg does.
+ModSharp runs alone. While it is on, the egg keeps CounterStrikeSharp and SwiftlyS2 unloaded: SwiftlyS2 comes out of `gameinfo.gi`, and `counterstrikesharp.vdf` becomes `counterstrikesharp.vdf.disabled` so MetaMod skips it. Files and configs stay. Turn ModSharp off with either of them on, and the egg swaps back: they load again, ModSharp comes out of `gameinfo.gi`.
 
 ## Holding a version
 

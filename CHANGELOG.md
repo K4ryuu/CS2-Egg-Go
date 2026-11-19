@@ -23,6 +23,7 @@ The bash egg this replaces has its own history at [K4ryuu/CS2-Egg](https://githu
 - Addons and the node stayed on a beta after a stable release came out. With `PRERELEASE` off, or the node on the stable channel, an installed beta now goes back to the latest stable. This fix was sent for the bash egg and got forgotten (thanks @shmitzas, [K4ryuu/CS2-Egg#53](https://github.com/K4ryuu/CS2-Egg/pull/53)).
 - Turning on SwiftlyS2 or ModSharp on an older server put it above MetaMod in `gameinfo.gi`, so MetaMod and CounterStrikeSharp stopped loading.
 - ModSharp never got its .NET runtime. The runtime archive starts with a `./` entry, and the unpacking refused it.
+- ModSharp next to CounterStrikeSharp or SwiftlyS2 only got a console warning, though the panel says they get switched off. While ModSharp is on they now stay unloaded, and they come back once it is off.
 - The maintenance pass counted `every_hours` from each daemon start, so a node that restarted more often (a self-update, `cs2node install`) never got one. It now counts from the last pass.
 - Workshop `keep_days: 0` removed every unused version instead of keeping them all, and the days counted from when a version was stored instead of from its last use.
 - `cs2node status` and `cs2node doctor` showed an empty map for a crash that came before a map loaded.

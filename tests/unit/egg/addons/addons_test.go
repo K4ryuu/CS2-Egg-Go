@@ -359,12 +359,12 @@ func TestGameinfoAddOrderAndTokenless(t *testing.T) {
 	if changed, _ := gi.SetTokenless(true); changed {
 		t.Fatal("already set")
 	}
-	if gi.HasSharp() {
-		t.Fatal("no sharp yet")
-	}
 	gi.Add("sharp")
-	if !gi.HasSharp() {
-		t.Fatal("sharp detection")
+	if changed, err := gi.Remove("sharp"); err != nil || !changed {
+		t.Fatalf("remove sharp: %v %v", changed, err)
+	}
+	if data, _ = os.ReadFile(p); strings.Contains(string(data), "sharp") || !strings.Contains(string(data), "csgo/addons/swiftlys2") {
+		t.Fatalf("after remove: %s", data)
 	}
 }
 
